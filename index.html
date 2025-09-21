@@ -1,310 +1,679 @@
 <!DOCTYPE html>
+
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roggen-Sauerteigbrot Rechner</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIlNhdWVydGVpZy1SZWNobmVyIiwKICAic2hvcnRfbmFtZSI6ICJTYWF1ZXJ0ZWlnIiwKICAic3RhcnRfdXJsIjogIi4vIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjZmZmZmZmIiwKICAidGhlbWVfY29sb3IiOiAiI2Y1OWUwYiIKfQ==">
+    <title>🌾 Multi-Mehl Sauerteigbrot Rechner</title>
     <style>
-        body { margin: 0; padding: 20px; background: #f9fafb; font-family: system-ui, -apple-system, sans-serif; }
-    </style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+```
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        text-align: center;
+    }
+    
+    .header h1 {
+        margin: 0 0 10px 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+    
+    .controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 25px;
+        padding: 30px;
+        background: #f8fafc;
+    }
+    
+    .control-group {
+        background: white;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        border-left: 4px solid #667eea;
+    }
+    
+    .control-group h3 {
+        margin: 0 0 20px 0;
+        color: #2d3748;
+        font-size: 1.2rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #4a5568;
+        font-size: 0.9rem;
+    }
+    
+    .slider {
+        width: 100%;
+        height: 8px;
+        border-radius: 4px;
+        background: #e2e8f0;
+        outline: none;
+        appearance: none;
+        cursor: pointer;
+    }
+    
+    .slider::-webkit-slider-thumb {
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #667eea;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .slider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #667eea;
+        cursor: pointer;
+        border: none;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    select {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        background: white;
+        font-size: 0.95rem;
+        cursor: pointer;
+    }
+    
+    select:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+    
+    .mehl-info {
+        background: #f7fafc;
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+        border-left: 4px solid #48bb78;
+    }
+    
+    .mehl-info h4 {
+        margin: 0 0 5px 0;
+        color: #2d3748;
+        font-size: 1rem;
+    }
+    
+    .mehl-info p {
+        margin: 0 0 10px 0;
+        font-size: 0.85rem;
+        color: #4a5568;
+    }
+    
+    .mehl-anteile {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 5px;
+        font-size: 0.8rem;
+        margin-top: 10px;
+    }
+    
+    .zeitplan {
+        background: #edf2f7;
+        padding: 15px;
+        border-radius: 8px;
+    }
+    
+    .zeitplan-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #cbd5e0;
+        font-size: 0.9rem;
+    }
+    
+    .zeitplan-item:last-child {
+        border-bottom: none;
+    }
+    
+    .zeitplan-item .zeit {
+        font-weight: 600;
+        color: #2b6cb0;
+    }
+    
+    .recipe {
+        padding: 30px;
+    }
+    
+    .recipe-section {
+        margin-bottom: 30px;
+        padding: 25px;
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .recipe-section::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+    }
+    
+    .section-sauerteig {
+        background: #ebf8ff;
+        border-left: 4px solid #3182ce;
+    }
+    
+    .section-hauptteig {
+        background: #fffaf0;
+        border-left: 4px solid #d69e2e;
+    }
+    
+    .section-backen {
+        background: #fed7d7;
+        border-left: 4px solid #e53e3e;
+    }
+    
+    .recipe-section h2 {
+        margin: 0 0 20px 0;
+        font-size: 1.4rem;
+        color: #2d3748;
+    }
+    
+    .recipe-content {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 25px;
+    }
+    
+    .zutat-liste {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .zutat-liste li {
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .zutat-liste li:before {
+        content: '•';
+        color: #667eea;
+        font-weight: bold;
+        font-size: 1.2rem;
+    }
+    
+    .tipps {
+        background: #f0fff4;
+        padding: 20px;
+        border-radius: 12px;
+        border-left: 4px solid #48bb78;
+        margin-top: 20px;
+    }
+    
+    .tipps h3 {
+        margin: 0 0 15px 0;
+        color: #2d3748;
+    }
+    
+    .tipps ul {
+        margin: 0;
+        padding-left: 20px;
+        columns: 2;
+        column-gap: 30px;
+    }
+    
+    .tipps li {
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+        color: #4a5568;
+        break-inside: avoid;
+    }
+    
+    .ergebnis-info {
+        background: linear-gradient(135deg, #fef5e7 0%, #fbd38d 100%);
+        padding: 20px;
+        border-radius: 12px;
+        margin-top: 20px;
+    }
+    
+    .ergebnis-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-top: 15px;
+    }
+    
+    .custom-controls {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-top: 15px;
+    }
+    
+    .custom-slider-group {
+        margin-bottom: 15px;
+    }
+    
+    .custom-slider-group label {
+        font-size: 0.8rem;
+        color: #4a5568;
+    }
+    
+    .normalize-btn {
+        background: #3182ce;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    
+    .normalize-btn:hover {
+        background: #2c5282;
+    }
+    
+    .warning {
+        color: #e53e3e;
+        font-size: 0.8rem;
+        margin-top: 5px;
+    }
+    
+    @media (max-width: 768px) {
+        .controls {
+            grid-template-columns: 1fr;
+            padding: 20px;
+        }
+        
+        .tipps ul {
+            columns: 1;
+        }
+        
+        .recipe-content {
+            grid-template-columns: 1fr;
+        }
+        
+        .custom-controls {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+```
+
 </head>
 <body>
-    <div id="root"></div>
-    
-    <script type="text/babel">
-        const { useState } = React;
+    <div class="container">
+        <div class="header">
+            <h1>🌾 Multi-Mehl Sauerteigbrot Rechner</h1>
+            <p>Roggen • Dinkel • Weizen • Buchweizen - Ihr perfektes Mischverhältnis</p>
+        </div>
 
-        const SauerteigRechner = () => {
-          const [anstellgutMenge, setAnstellgutMenge] = useState(120);
-          const [sauerteigTemp, setSauerteigTemp] = useState(22);
-          const [gareTemp, setGareTemp] = useState(30);
-          const [brotGroesse, setBrotGroesse] = useState(1200);
-
-          // Berechnung Sauerteig
-          const getSauerteigRezept = () => {
-            // Für 600g Sauerteig benötigt - rückwärts rechnen
-            const zielSauerteig = Math.round(600 * (brotGroesse / 1200));
+```
+    <div class="controls">
+        <!-- Grundeinstellungen -->
+        <div class="control-group">
+            <h3>⚙️ Grundeinstellungen</h3>
             
-            let mehl, wasser;
+            <div class="form-group">
+                <label>Anstellgut: <span id="anstellgut-wert">120</span>g</label>
+                <input type="range" id="anstellgut" class="slider" min="30" max="200" value="120">
+            </div>
             
-            if (anstellgutMenge <= 50) {
-              // 1:2.75:2.75 Verhältnis für wenig Anstellgut
-              const faktor = (zielSauerteig - anstellgutMenge) / 5.5;
-              mehl = Math.round(faktor * 2.75);
-              wasser = Math.round(faktor * 2.75);
-            } else {
-              // 1:2:2 Verhältnis für mehr Anstellgut  
-              const faktor = (zielSauerteig - anstellgutMenge) / 4;
-              mehl = Math.round(faktor * 2);
-              wasser = Math.round(faktor * 2);
-            }
+            <div class="form-group">
+                <label>Sauerteig-Temperatur: <span id="sauerteig-temp-wert">22</span>°C</label>
+                <input type="range" id="sauerteig-temp" class="slider" min="18" max="32" value="22">
+            </div>
             
-            const gesamt = anstellgutMenge + mehl + wasser;
+            <div class="form-group">
+                <label>Gare-Temperatur: <span id="gare-temp-wert">30</span>°C</label>
+                <input type="range" id="gare-temp" class="slider" min="20" max="32" value="30">
+            </div>
             
-            return { mehl, wasser, gesamt, zielSauerteig };
-          };
+            <div class="form-group">
+                <label>Brotgröße: <span id="brot-groesse-wert">1200</span>g</label>
+                <input type="range" id="brot-groesse" class="slider" min="600" max="2000" step="100" value="1200">
+            </div>
+        </div>
 
-          // Zeitberechnung Sauerteig
-          const getSauerteigZeit = () => {
-            if (sauerteigTemp >= 28) return anstellgutMenge <= 50 ? "6-8h" : "4-6h";
-            if (sauerteigTemp >= 24) return anstellgutMenge <= 50 ? "10-12h" : "8-10h";
-            return anstellgutMenge <= 50 ? "14-16h" : "12-14h";
-          };
-
-          // Berechnung Hauptteig basierend auf gewünschter Brotgröße
-          const getHauptteigRezept = () => {
-            const faktor = brotGroesse / 1200; // Basis: 1200g Brot
-            const sauerteig = Math.round(600 * faktor);
-            const mehl = Math.round(360 * faktor);
-            const wasser = Math.round(200 * faktor);
-            const salz = Math.round(14 * faktor);
-            const kuemmel = faktor <= 1 ? "1,5 TL" : "2 TL";
+        <!-- Mehl-Mischung -->
+        <div class="control-group">
+            <h3>🌾 Mehl-Mischung</h3>
             
-            return { sauerteig, mehl, wasser, salz, kuemmel };
-          };
-
-          // Zeitberechnung Gare
-          const getGareZeiten = () => {
-            const ersteGare = gareTemp >= 28 ? "35-50 Min" : gareTemp >= 24 ? "45-60 Min" : "60-90 Min";
-            const stueckgare = "1-1,5h"; // immer Zimmertemperatur
-            const backzeit = brotGroesse >= 1200 ? "45-55 Min" : brotGroesse >= 900 ? "40-50 Min" : "35-45 Min";
+            <div class="form-group">
+                <label>Mischung wählen:</label>
+                <select id="mehl-mischung">
+                    <option value="roggen-pur">Reines Roggen</option>
+                    <option value="roggen-optimal" selected>Roggen Optimal (empfohlen)</option>
+                    <option value="roggen-dinkel">Roggen-Dinkel</option>
+                    <option value="roggen-weizen">Roggen-Weizen</option>
+                    <option value="vollkorn-mix">Vollkorn-Mix</option>
+                    <option value="buchweizen-spezial">Buchweizen Spezial</option>
+                    <option value="mild-luftig">Mild & Luftig</option>
+                    <option value="power-vollkorn">Power Vollkorn</option>
+                    <option value="custom">Eigene Mischung</option>
+                </select>
+            </div>
             
-            return { ersteGare, stueckgare, backzeit };
-          };
+            <div class="mehl-info" id="mehl-info">
+                <h4 id="mischung-name">Roggen Optimal</h4>
+                <p id="mischung-beschreibung">Beste Balance: Geschmack + Lockerung + Bekömmlichkeit</p>
+                <p id="mischung-eigenschaften"><strong>Eigenschaften:</strong> Ausgewogen, gut aufgehend, mild-kräftig</p>
+                <div class="mehl-anteile" id="mehl-anteile">
+                    <div>🟫 Roggen: 70%</div>
+                    <div>🟤 Dinkel: 20%</div>
+                    <div>🟡 Weizen: 10%</div>
+                    <div>⚫ Buchweizen: 0%</div>
+                </div>
+            </div>
+            
+            <div id="custom-controls" style="display: none;">
+                <div class="custom-controls">
+                    <div class="custom-slider-group">
+                        <label>🟫 Roggen: <span id="custom-roggen-wert">70</span>%</label>
+                        <input type="range" id="custom-roggen" class="slider" min="0" max="100" value="70">
+                    </div>
+                    <div class="custom-slider-group">
+                        <label>🟤 Dinkel: <span id="custom-dinkel-wert">20</span>%</label>
+                        <input type="range" id="custom-dinkel" class="slider" min="0" max="100" value="20">
+                    </div>
+                    <div class="custom-slider-group">
+                        <label>🟡 Weizen: <span id="custom-weizen-wert">10</span>%</label>
+                        <input type="range" id="custom-weizen" class="slider" min="0" max="100" value="10">
+                    </div>
+                    <div class="custom-slider-group">
+                        <label>⚫ Buchweizen: <span id="custom-buchweizen-wert">0</span>%</label>
+                        <input type="range" id="custom-buchweizen" class="slider" min="0" max="100" value="0">
+                    </div>
+                </div>
+                <div>
+                    <span id="summe-anzeige">Summe: 100%</span>
+                    <button id="normalize-btn" class="normalize-btn" style="display: none;">Auf 100% korrigieren</button>
+                </div>
+            </div>
+        </div>
 
-          const sauerteig = getSauerteigRezept();
-          const hauptteig = getHauptteigRezept();
-          const zeiten = getGareZeiten();
+        <!-- Zeitplan -->
+        <div class="control-group">
+            <h3>⏰ Zeitplan</h3>
+            <div class="zeitplan">
+                <div class="zeitplan-item">
+                    <span>Sauerteig-Reifezeit:</span>
+                    <span class="zeit" id="sauerteig-zeit">8-10h</span>
+                </div>
+                <div class="zeitplan-item">
+                    <span>Erste Gare:</span>
+                    <span class="zeit" id="erste-gare-zeit">35-50 Min</span>
+                </div>
+                <div class="zeitplan-item">
+                    <span>Stückgare:</span>
+                    <span class="zeit">1-1,5h</span>
+                </div>
+                <div class="zeitplan-item">
+                    <span>Backzeit (200°C):</span>
+                    <span class="zeit" id="back-zeit">45-55 Min</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
-          return React.createElement('div', { className: "max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg" },
-            React.createElement('div', { className: "mb-8 text-center" },
-              React.createElement('h1', { className: "text-3xl font-bold text-amber-800 mb-2" }, "🍞 Roggen-Sauerteigbrot Rechner"),
-              React.createElement('p', { className: "text-gray-600" }, "Passen Sie Ihr Rezept individuell an")
-            ),
+    <div class="recipe">
+        <!-- Sauerteig -->
+        <div class="recipe-section section-sauerteig">
+            <h2>1. Sauerteig herstellen (am Vorabend)</h2>
+            <div class="recipe-content">
+                <div>
+                    <h4>Zutaten:</h4>
+                    <ul class="zutat-liste">
+                        <li><span id="anstellgut-menge">120</span>g Anstellgut</li>
+                        <li><span id="sauerteig-mehl">240</span>g Roggen-Vollkornmehl</li>
+                        <li><span id="sauerteig-wasser">240</span>ml Wasser</li>
+                    </ul>
+                    <p style="margin-top: 15px; font-size: 0.9rem; color: #2b6cb0;">
+                        → Ergebnis: ca. <span id="sauerteig-gesamt">600</span>g aktiver Sauerteig<br>
+                        → Benötigt: <span id="sauerteig-benoetigt">600</span>g für das Rezept
+                    </p>
+                </div>
+                <div>
+                    <h4>Zeit & Temperatur:</h4>
+                    <p>🌡️ <span id="temp-anzeige">22</span>°C: <strong id="zeit-anzeige">8-10h</strong></p>
+                    <div id="temp-hinweise"></div>
+                </div>
+            </div>
+        </div>
 
-            // Eingabe-Bereich
-            React.createElement('div', { className: "grid md:grid-cols-2 gap-6 mb-8" },
-              React.createElement('div', { className: "space-y-4" },
-                React.createElement('div', { className: "bg-amber-50 p-4 rounded-lg border border-amber-200" },
-                  React.createElement('h3', { className: "font-semibold text-amber-800 mb-3 flex items-center" },
-                    "⚙️ Einstellungen"
-                  ),
-                  
-                  React.createElement('div', { className: "space-y-4" },
-                    React.createElement('div', null,
-                      React.createElement('label', { className: "block text-sm font-medium mb-2" },
-                        `Verfügbares Anstellgut: ${anstellgutMenge}g`
-                      ),
-                      React.createElement('input', {
-                        type: "range",
-                        min: "30",
-                        max: "200",
-                        value: anstellgutMenge,
-                        onChange: (e) => setAnstellgutMenge(Number(e.target.value)),
-                        className: "w-full h-2 bg-amber-200 rounded-lg appearance-none cursor-pointer"
-                      }),
-                      React.createElement('div', { className: "flex justify-between text-xs text-gray-500 mt-1" },
-                        React.createElement('span', null, "30g"),
-                        React.createElement('span', null, "200g")
-                      )
-                    ),
+        <!-- Hauptteig -->
+        <div class="recipe-section section-hauptteig">
+            <h2>2. Hauptteig</h2>
+            <div class="recipe-content">
+                <div>
+                    <h4>Zutaten:</h4>
+                    <ul class="zutat-liste" id="hauptteig-zutaten">
+                        <li><span id="hauptteig-sauerteig">600</span>g aktiver Sauerteig</li>
+                        <li id="roggen-zeile"><span id="hauptteig-roggen">252</span>g Roggen-Vollkornmehl</li>
+                        <li id="dinkel-zeile"><span id="hauptteig-dinkel">72</span>g Dinkel-Vollkornmehl</li>
+                        <li id="weizen-zeile"><span id="hauptteig-weizen">36</span>g Weizen-Vollkornmehl</li>
+                        <li id="buchweizen-zeile" style="display: none;"><span id="hauptteig-buchweizen">0</span>g Buchweizenmehl</li>
+                        <li><span id="hauptteig-wasser">200</span>ml warmes Wasser</li>
+                        <li><span id="hauptteig-salz">14</span>g Salz</li>
+                        <li><span id="hauptteig-kuemmel">1,5</span> TL Kümmel (optional)</li>
+                    </ul>
+                </div>
+                <div>
+                    <div style="margin-bottom: 15px;">
+                        <span style="font-weight: 600;">Autolyse:</span>
+                        <span style="color: #d69e2e; margin-left: 8px;" id="autolyse-zeit">45-60 Min</span>
+                    </div>
+                    <div style="margin-bottom: 15px;">
+                        <span style="font-weight: 600;">Erste Gare:</span>
+                        <span style="color: #d69e2e; margin-left: 8px;" id="erste-gare-anzeige">35-50 Min</span>
+                    </div>
+                    <div style="font-size: 0.8rem; color: #4a5568; margin-top: 15px;">
+                        <p>Gesamt Mehl: <span id="gesamt-mehl">360</span>g</p>
+                        <p>Hydration: <span id="hydration">56</span>%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                    React.createElement('div', null,
-                      React.createElement('label', { className: "block text-sm font-medium mb-2" },
-                        `Sauerteig-Temperatur: ${sauerteigTemp}°C`
-                      ),
-                      React.createElement('input', {
-                        type: "range",
-                        min: "18",
-                        max: "32",
-                        value: sauerteigTemp,
-                        onChange: (e) => setSauerteigTemp(Number(e.target.value)),
-                        className: "w-full h-2 bg-blue-200 rounded-lg appearance-none cursor-pointer"
-                      }),
-                      React.createElement('div', { className: "flex justify-between text-xs text-gray-500 mt-1" },
-                        React.createElement('span', null, "18°C"),
-                        React.createElement('span', null, "32°C")
-                      )
-                    ),
+        <!-- Formen & Backen -->
+        <div class="recipe-section section-backen">
+            <h2>3. Formen & Backen</h2>
+            <div class="recipe-content">
+                <div>
+                    <h4>Formen:</h4>
+                    <p id="form-anleitung">Mit feuchten Händen rundwirken → In bemehlten Gärkorb (glatte Seite nach unten)</p>
+                    
+                    <h4 style="margin-top: 20px;">Stückgare & Backvorbereitung:</h4>
+                    <p>Stückgare bei Zimmertemperatur: <strong>1-1,5h</strong><br>
+                    Parallel: Ofen auf 250°C vorheizen (30-40 Min)</p>
+                </div>
+                <div>
+                    <h4>Backen:</h4>
+                    <ul class="zutat-liste">
+                        <li>Stürzen und kreuzförmig einschneiden</li>
+                        <li>20 Min bei 250°C mit Dampf</li>
+                        <li id="back-zeit-anzeige">45-55 Min bei 200°C ohne Dampf</li>
+                        <li>Mittlere Schiene verwenden!</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
 
-                    React.createElement('div', null,
-                      React.createElement('label', { className: "block text-sm font-medium mb-2" },
-                        `Gare-Temperatur: ${gareTemp}°C`
-                      ),
-                      React.createElement('input', {
-                        type: "range",
-                        min: "20",
-                        max: "32",
-                        value: gareTemp,
-                        onChange: (e) => setGareTemp(Number(e.target.value)),
-                        className: "w-full h-2 bg-green-200 rounded-lg appearance-none cursor-pointer"
-                      }),
-                      React.createElement('div', { className: "flex justify-between text-xs text-gray-500 mt-1" },
-                        React.createElement('span', null, "20°C"),
-                        React.createElement('span', null, "32°C")
-                      )
-                    ),
+        <!-- Ergebnis-Vorhersage -->
+        <div class="ergebnis-info">
+            <h3>🍞 Erwartetes Ergebnis:</h3>
+            <div class="ergebnis-grid">
+                <div>
+                    <h4 style="margin: 0 0 8px 0; color: #744210;">Krume:</h4>
+                    <p id="krume-beschreibung" style="margin: 0; color: #4a5568;">Ausgewogen, mittel-locker</p>
+                </div>
+                <div>
+                    <h4 style="margin: 0 0 8px 0; color: #744210;">Geschmack:</h4>
+                    <p id="geschmack-beschreibung" style="margin: 0; color: #4a5568;">Ausgewogen, mittel-kräftig</p>
+                </div>
+                <div>
+                    <h4 style="margin: 0 0 8px 0; color: #744210;">Haltbarkeit:</h4>
+                    <p id="haltbarkeit-beschreibung" style="margin: 0; color: #4a5568;">3-5 Tage</p>
+                </div>
+            </div>
+        </div>
 
-                    React.createElement('div', null,
-                      React.createElement('label', { className: "block text-sm font-medium mb-2" },
-                        `Gewünschte Brotgröße: ${brotGroesse}g`
-                      ),
-                      React.createElement('input', {
-                        type: "range",
-                        min: "600",
-                        max: "2000",
-                        step: "100",
-                        value: brotGroesse,
-                        onChange: (e) => setBrotGroesse(Number(e.target.value)),
-                        className: "w-full h-2 bg-orange-200 rounded-lg appearance-none cursor-pointer"
-                      }),
-                      React.createElement('div', { className: "flex justify-between text-xs text-gray-500 mt-1" },
-                        React.createElement('span', null, "600g"),
-                        React.createElement('span', null, "2000g")
-                      )
-                    )
-                  )
-                )
-              ),
+        <!-- Tipps -->
+        <div class="tipps">
+            <h3>💡 Wichtige Tipps:</h3>
+            <ul id="tipps-liste">
+                <li>Fingertest: Delle federt nur zur Hälfte zurück = fertig</li>
+                <li>Bei viel Roggen: immer mit feuchten Händen arbeiten</li>
+                <li>Lieber etwas früher als zu spät backen</li>
+                <li>Klopftest: Fertiges Brot klingt hohl</li>
+                <li>Nach dem Backen mindestens 2h auskühlen lassen</li>
+                <li>Je höher der Roggen-Anteil, desto kompakter das Brot</li>
+            </ul>
+        </div>
+    </div>
+</div>
 
-              React.createElement('div', { className: "bg-green-50 p-4 rounded-lg border border-green-200" },
-                React.createElement('h3', { className: "font-semibold text-green-800 mb-3 flex items-center" },
-                  "⏰ Zeitplan"
-                ),
-                React.createElement('div', { className: "space-y-3" },
-                  React.createElement('div', { className: "flex justify-between" },
-                    React.createElement('span', { className: "text-sm" }, "Sauerteig-Reifezeit:"),
-                    React.createElement('span', { className: "font-medium text-green-700" }, getSauerteigZeit())
-                  ),
-                  React.createElement('div', { className: "flex justify-between" },
-                    React.createElement('span', { className: "text-sm" }, "Erste Gare:"),
-                    React.createElement('span', { className: "font-medium text-green-700" }, zeiten.ersteGare)
-                  ),
-                  React.createElement('div', { className: "flex justify-between" },
-                    React.createElement('span', { className: "text-sm" }, "Stückgare:"),
-                    React.createElement('span', { className: "font-medium text-green-700" }, zeiten.stueckgare)
-                  ),
-                  React.createElement('div', { className: "flex justify-between" },
-                    React.createElement('span', { className: "text-sm" }, "Backzeit (200°C):"),
-                    React.createElement('span', { className: "font-medium text-green-700" }, zeiten.backzeit)
-                  )
-                )
-              )
-            ),
+<script>
+    // Mehl-Mischungen Definition
+    const mehlMischungen = {
+        'roggen-pur': { 
+            roggen: 100, dinkel: 0, weizen: 0, buchweizen: 0, 
+            name: 'Reines Roggen', 
+            beschreibung: 'Traditionell, kräftig, kompakt, säuerlich',
+            eigenschaften: 'Sehr kompakt, intensiver Geschmack, lange haltbar'
+        },
+        'roggen-optimal': { 
+            roggen: 70, dinkel: 20, weizen: 10, buchweizen: 0, 
+            name: 'Roggen Optimal', 
+            beschreibung: 'Beste Balance: Geschmack + Lockerung + Bekömmlichkeit',
+            eigenschaften: 'Ausgewogen, gut aufgehend, mild-kräftig'
+        },
+        'roggen-dinkel': { 
+            roggen: 60, dinkel: 40, weizen: 0, buchweizen: 0, 
+            name: 'Roggen-Dinkel', 
+            beschreibung: 'Nussig, bekömmlich, lockerer als reiner Roggen',
+            eigenschaften: 'Nussiges Aroma, gute Verdaulichkeit, mittel-lockere Krume'
+        },
+        'roggen-weizen': { 
+            roggen: 70, dinkel: 0, weizen: 30, buchweizen: 0, 
+            name: 'Roggen-Weizen', 
+            beschreibung: 'Luftig, mild, gute Krume, familienfreundlich',
+            eigenschaften: 'Sehr locker, milder Geschmack, weiche Krume'
+        },
+        'vollkorn-mix': { 
+            roggen: 50, dinkel: 30, weizen: 15, buchweizen: 5, 
+            name: 'Vollkorn-Mix', 
+            beschreibung: 'Komplex, nährstoffreich, herzhaft, vielseitig',
+            eigenschaften: 'Komplexer Geschmack, sehr nährstoffreich, mittlere Lockerheit'
+        },
+        'buchweizen-spezial': { 
+            roggen: 60, dinkel: 20, weizen: 5, buchweizen: 15, 
+            name: 'Buchweizen Spezial', 
+            beschreibung: 'Glutenfrei-Anteil, nussig, dunkel, herzhaft',
+            eigenschaften: 'Dunkle Farbe, erdiger Geschmack, glutenarm'
+        },
+        'mild-luftig': { 
+            roggen: 40, dinkel: 30, weizen: 30, buchweizen: 0, 
+            name: 'Mild & Luftig', 
+            beschreibung: 'Für Einsteiger, sehr locker, milder Geschmack',
+            eigenschaften: 'Sehr locker, mild, toast-geeignet'
+        },
+        'power-vollkorn': { 
+            roggen: 45, dinkel: 25, weizen: 20, buchweizen: 10, 
+            name: 'Power Vollkorn', 
+            beschreibung: 'Maximum an Nährstoffen und Geschmack',
+            eigenschaften: 'Sehr nährstoffreich, kräftig, sättigend'
+        }
+    };
 
-            // Rezept-Ausgabe
-            React.createElement('div', { className: "space-y-6" },
-              // Sauerteig
-              React.createElement('div', { className: "bg-blue-50 p-6 rounded-lg border-l-4 border-blue-400" },
-                React.createElement('h2', { className: "text-xl font-bold text-blue-800 mb-4" }, "1. Sauerteig herstellen (am Vorabend)"),
-                React.createElement('div', { className: "grid md:grid-cols-2 gap-4" },
-                  React.createElement('div', null,
-                    React.createElement('h4', { className: "font-semibold mb-2" }, "Zutaten:"),
-                    React.createElement('ul', { className: "space-y-1" },
-                      React.createElement('li', null, `• ${anstellgutMenge}g Anstellgut`),
-                      React.createElement('li', null, `• ${sauerteig.mehl}g Roggen-Vollkornmehl`),
-                      React.createElement('li', null, `• ${sauerteig.wasser}ml Wasser`)
-                    ),
-                    React.createElement('p', { className: "mt-2 text-sm text-blue-600" },
-                      `→ Ergebnis: ca. ${sauerteig.gesamt}g aktiver Sauerteig`,
-                      React.createElement('br'),
-                      `→ Benötigt: ${sauerteig.zielSauerteig}g für das Rezept`
-                    )
-                  ),
-                  React.createElement('div', null,
-                    React.createElement('h4', { className: "font-semibold mb-2" }, "Zeit & Temperatur:"),
-                    React.createElement('p', { className: "text-sm" },
-                      `🌡️ ${sauerteigTemp}°C: `,
-                      React.createElement('strong', null, getSauerteigZeit())
-                    ),
-                    sauerteigTemp >= 28 && React.createElement('p', { className: "text-xs text-orange-600 mt-1" },
-                      "⚠️ Bei hoher Temperatur gut beobachten!"
-                    )
-                  )
-                )
-              ),
+    // DOM Elemente
+    const elements = {
+        anstellgut: document.getElementById('anstellgut'),
+        anstellgutWert: document.getElementById('anstellgut-wert'),
+        sauerteigTemp: document.getElementById('sauerteig-temp'),
+        sauerteigTempWert: document.getElementById('sauerteig-temp-wert'),
+        gareTemp: document.getElementById('gare-temp'),
+        gareTempWert: document.getElementById('gare-temp-wert'),
+        brotGroesse: document.getElementById('brot-groesse'),
+        brotGroesseWert: document.getElementById('brot-groesse-wert'),
+        mehlMischung: document.getElementById('mehl-mischung'),
+        customControls: document.getElementById('custom-controls'),
+        customRoggen: document.getElementById('custom-roggen'),
+        customRoggenWert: document.getElementById('custom-roggen-wert'),
+        customDinkel: document.getElementById('custom-dinkel'),
+        customDinkelWert: document.getElementById('custom-dinkel-wert'),
+        customWeizen: document.getElementById('custom-weizen'),
+        customWeizenWert: document.getElementById('custom-weizen-wert'),
+        customBuchweizen: document.getElementById('custom-buchweizen'),
+        customBuchweizenWert: document.getElementById('custom-buchweizen-wert'),
+        summeAnzeige: document.getElementById('summe-anzeige'),
+        normalizeBtn: document.getElementById('normalize-btn')
+    };
 
-              // Hauptteig
-              React.createElement('div', { className: "bg-amber-50 p-6 rounded-lg border-l-4 border-amber-400" },
-                React.createElement('h2', { className: "text-xl font-bold text-amber-800 mb-4" }, "2. Hauptteig"),
-                React.createElement('div', { className: "grid md:grid-cols-2 gap-4" },
-                  React.createElement('div', null,
-                    React.createElement('h4', { className: "font-semibold mb-2" }, "Zutaten:"),
-                    React.createElement('ul', { className: "space-y-1" },
-                      React.createElement('li', null, `• ${hauptteig.sauerteig}g aktiver Roggen-Sauerteig`),
-                      React.createElement('li', null, `• ${hauptteig.mehl}g Roggen-Vollkornmehl`),
-                      React.createElement('li', null, `• ${hauptteig.wasser}ml warmes Wasser`),
-                      React.createElement('li', null, `• ${hauptteig.salz}g Salz`),
-                      React.createElement('li', null, `• ${hauptteig.kuemmel} Kümmel (optional)`)
-                    )
-                  ),
-                  React.createElement('div', { className: "space-y-2" },
-                    React.createElement('div', null,
-                      React.createElement('span', { className: "text-sm font-medium" }, "Autolyse:"),
-                      React.createElement('span', { className: "text-amber-700 ml-2" }, "45-60 Min")
-                    ),
-                    React.createElement('div', null,
-                      React.createElement('span', { className: "text-sm font-medium" }, `Erste Gare (${gareTemp}°C):`),
-                      React.createElement('span', { className: "text-amber-700 ml-2" }, zeiten.ersteGare)
-                    )
-                  )
-                )
-              ),
+    // Event Listeners
+    elements.anstellgut.addEventListener('input', function() {
+        elements.anstellgutWert.textContent = this.value;
+        berechneRezept();
+    });
 
-              // Formen & Backen
-              React.createElement('div', { className: "bg-red-50 p-6 rounded-lg border-l-4 border-red-400" },
-                React.createElement('h2', { className: "text-xl font-bold text-red-800 mb-4" }, "3. Formen & Backen"),
-                React.createElement('div', { className: "space-y-4" },
-                  React.createElement('div', null,
-                    React.createElement('h4', { className: "font-semibold mb-2" }, "Formen:"),
-                    React.createElement('p', { className: "text-sm text-gray-700" },
-                      "Mit feuchten Händen rundwirken → In bemehlten Gärkorb (glatte Seite nach unten)"
-                    )
-                  ),
-                  
-                  React.createElement('div', null,
-                    React.createElement('h4', { className: "font-semibold mb-2" }, "Stückgare & Backvorbereitung:"),
-                    React.createElement('p', { className: "text-sm text-gray-700" },
-                      `Stückgare bei Zimmertemperatur: `,
-                      React.createElement('strong', null, zeiten.stueckgare),
-                      React.createElement('br'),
-                      "Parallel: Ofen auf 250°C vorheizen (30-40 Min)"
-                    )
-                  ),
-                  
-                  React.createElement('div', null,
-                    React.createElement('h4', { className: "font-semibold mb-2" }, "Backen:"),
-                    React.createElement('ul', { className: "text-sm text-gray-700 space-y-1" },
-                      React.createElement('li', null, "• Stürzen und kreuzförmig einschneiden"),
-                      React.createElement('li', null, "• 20 Min bei 250°C mit Dampf"),
-                      React.createElement('li', null, `• ${zeiten.backzeit} bei 200°C ohne Dampf`),
-                      React.createElement('li', null, "• Mittlere Schiene verwenden!")
-                    )
-                  )
-                )
-              ),
+    elements.sauerteigTemp.addEventListener('input', function() {
+        elements.sauerteigTempWert.textContent = this.value;
+        berechneRezept();
+    });
 
-              // Tipps
-              React.createElement('div', { className: "bg-gray-50 p-4 rounded-lg border border-gray-200" },
-                React.createElement('h3', { className: "font-semibold text-gray-800 mb-2" }, "💡 Wichtige Tipps:"),
-                React.createElement('ul', { className: "text-sm text-gray-600 space-y-1" },
-                  React.createElement('li', null, "• Fingertest: Delle federt nur zur Hälfte zurück = fertig"),
-                  React.createElement('li', null, "• Roggenteig ist klebrig - immer mit feuchten Händen arbeiten"),
-                  React.createElement('li', null, "• Lieber etwas früher als zu spät backen"),
-                  React.createElement('li', null, "• Klopftest: Fertiges Brot klingt hohl"),
-                  gareTemp >= 30 && React.createElement('li', null, "• Bei warmer Gare: Zeiten verkürzen sich deutlich!")
-                )
-              )
-            )
-          );
-        };
+    elements.gareTemp.addEventListener('input', function() {
+        elements.gareTempWert.textContent = this.value;
+        berechneRezept();
+    });
 
-        ReactDOM.render(React.createElement(SauerteigRechner), document.getElementById('root'));
-    </script>
-</body>
-</html>
+    elements.brotGroesse.addEventListener('input', function() {
+        elements.brotGroesseWert.textContent = this.value;
+        berechneRezept();
+    });
+
+    elements.mehlMischung.addEventListener('change', function() {
+        if (this.value === 'custom') {
+            elements.customControls.style.display = 'block';
+        } else {
+            elements.customControls.style.
+```
