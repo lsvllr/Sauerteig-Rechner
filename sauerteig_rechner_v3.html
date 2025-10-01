@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌾 Multi-Mehl Sauerteigbrot Rechner</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        
+        .header-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 2px solid rgba(255,255,255,0.5);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .header-btn:hover {
+            background: rgba(255,255,255,0.3);
+            border-color: white;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            padding: 30px;
+            background: #f8fafc;
+        }
+        
+        .control-group {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border-left: 4px solid #667eea;
+        }
+        
+        .control-group h3 {
+            margin: 0 0 20px 0;
+            color: #2d3748;
+            font-size: 1.2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 8px;
+            border-radius: 4px;
+            background: #e2e8f0;
+            outline: none;
+            appearance: none;
+            cursor: pointer;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+        
+        .mehl-info {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            border-left: 4px solid #48bb78;
+        }
+        
+        .mehl-info h4 {
+            margin: 0 0 5px 0;
+            color: #2d3748;
+            font-size: 1rem;
+        }
+        
+        .mehl-info p {
+            margin: 0 0 10px 0;
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+        
+        .mehl-anteile {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 5px;
+            font-size: 0.8rem;
+            margin-top: 10px;
+        }
+        
+        .zeitplan {
+            background: #edf2f7;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .zeitplan-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #cbd5e0;
+            font-size: 0.9rem;
+        }
+        
+        .zeitplan-item:last-child {
+            border-bottom: none;
+        }
+        
+        .zeitplan-item .zeit {
+            font-weight: 600;
+            color: #2b6cb0;
+        }
+        
+        .recipe {
+            padding: 30px;
+        }
+        
+        .recipe-section {
+            margin-bottom: 30px;
+            padding: 25px;
+            border-radius: 12px;
+        }
+        
+        .section-sauerteig {
+            background: #ebf8ff;
+            border-left: 4px solid #3182ce;
+        }
+        
+        .section-hauptteig {
+            background: #fffaf0;
+            border-left: 4px solid #d69e2e;
+        }
+        
+        .section-backen {
+            background: #fed7d7;
+            border-left: 4px solid #e53e3e;
+        }
+        
+        .recipe-section h2 {
+            margin: 0 0 20px 0;
+            font-size: 1.4rem;
+            color: #2d3748;
+        }
+        
+        .recipe-content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+        }
+        
+        .zutat-liste {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .zutat-liste li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .zutat-liste li:before {
+            content: '•';
+            color: #667eea;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        
+        .tipps {
+            background: #f0fff4;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #48bb78;
+            margin-top: 20px;
+        }
+        
+        .tipps h3 {
+            margin: 0 0 15px 0;
+            color: #2d3748;
+        }
+        
+        .tipps ul {
+            margin: 0;
+            padding-left: 20px;
+            columns: 2;
+            column-gap: 30px;
+        }
+        
+        .tipps li {
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            color: #4a5568;
+            break-inside: avoid;
+        }
+        
+        .ergebnis-info {
+            background: linear-gradient(135deg, #fef5e7 0%, #fbd38d 100%);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+        
+        .ergebnis-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .custom-controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .custom-slider-group {
+            margin-bottom: 15px;
+        }
+        
+        .normalize-btn {
+            background: #3182ce;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            .tipps ul {
+                columns: 1;
+            }
+            .recipe-content {
+                grid-template-columns: 1fr;
+            }
+            .custom-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌾 Multi-Mehl Sauerteigbrot Rechner</h1>
+            <p>Roggen • Dinkel • Weizen • Buchweizen</p>
+            <div class="header-controls">
+                <button class="header-btn" id="save-btn">💾 Rezept speichern</button>
+                <button class="header-btn" id="load-btn">📂 Rezept laden</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <h3>⚙️ Grundeinstellungen</h3>
+                
+                <div class="form-group">
+                    <label>Anstellgut: <span id="anstellgut-wert">120</span>g</label>
+                    <input type="range" id="anstellgut" class="slider" min="30" max="200" value="120">
+                </div>
+                
+                <div class="form-group">
+                    <label>Sauerteig-Temperatur: <span id="sauerteig-temp-wert">22</span>°C</label>
+                    <input type="range" id="sauerteig-temp" class="slider" min="18" max="32" value="22">
+                </div>
+                
+                <div class="form-group">
+                    <label>Gare-Temperatur: <span id="gare-temp-wert">30</span>°C</label>
+                    <input type="range" id="gare-temp" class="slider" min="20" max="32" value="30">
+                </div>
+                
+                <div class="form-group">
+                    <label>Brotgröße: <span id="brot-groesse-wert">1200</span>g</label>
+                    <input type="range" id="brot-groesse" class="slider" min="600" max="2000" step="100" value="1200">
+                </div>
+                
+                <div class="form-group">
+                    <label>Hydration: <span id="hydration-wert">70</span>% <span id="hydration-hinweis" style="font-size: 0.75rem; color: #48bb78;">●empfohlen</span></label>
+                    <input type="range" id="hydration-slider" class="slider" min="50" max="85" value="70">
+                    <p style="font-size: 0.75rem; color: #718096; margin-top: 5px;">Höhere Werte = weicherer Teig</p>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>🌾 Mehl-Mischung</h3>
+                
+                <div class="form-group">
+                    <label>Mischung wählen:</label>
+                    <select id="mehl-mischung">
+                        <option value="roggen-pur">Reines Roggen</option>
+                        <option value="roggen-optimal" selected>Roggen Optimal (empfohlen)</option>
+                        <option value="roggen-dinkel">Roggen-Dinkel</option>
+                        <option value="roggen-weizen">Roggen-Weizen</option>
+                        <option value="vollkorn-mix">Vollkorn-Mix</option>
+                        <option value="buchweizen-spezial">Buchweizen Spezial</option>
+                        <option value="mild-luftig">Mild & Luftig</option>
+                        <option value="power-vollkorn">Power Vollkorn</option>
+                        <option value="custom">Eigene Mischung</option>
+                    </select>
+                </div>
+                
+                <div class="mehl-info" id="mehl-info">
+                    <h4 id="mischung-name">Roggen Optimal</h4>
+                    <p id="mischung-beschreibung">Beste Balance</p>
+                    <p id="mischung-eigenschaften"><strong>Eigenschaften:</strong> Ausgewogen</p>
+                    <div class="mehl-anteile" id="mehl-anteile"></div>
+                </div>
+                
+                <div id="custom-controls" style="display: none;">
+                    <div class="custom-controls">
+                        <div class="custom-slider-group">
+                            <label>🟫 Roggen: <span id="custom-roggen-wert">70</span>%</label>
+                            <input type="range" id="custom-roggen" class="slider" min="0" max="100" value="70">
+                        </div>
+                        <div class="custom-slider-group">
+                            <label>🟤 Dinkel: <span id="custom-dinkel-wert">20</span>%</label>
+                            <input type="range" id="custom-dinkel" class="slider" min="0" max="100" value="20">
+                        </div>
+                        <div class="custom-slider-group">
+                            <label>🟡 Weizen: <span id="custom-weizen-wert">10</span>%</label>
+                            <input type="range" id="custom-weizen" class="slider" min="0" max="100" value="10">
+                        </div>
+                        <div class="custom-slider-group">
+                            <label>⚫ Buchweizen: <span id="custom-buchweizen-wert">0</span>%</label>
+                            <input type="range" id="custom-buchweizen" class="slider" min="0" max="100" value="0">
+                        </div>
+                    </div>
+                    <div>
+                        <span id="summe-anzeige">Summe: 100%</span>
+                        <button id="normalize-btn" class="normalize-btn" style="display: none;">Auf 100% korrigieren</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>⏰ Zeitplan</h3>
+                <div class="zeitplan">
+                    <div class="zeitplan-item">
+                        <span>Sauerteig-Reifezeit:</span>
+                        <span class="zeit" id="sauerteig-zeit">8-10h</span>
+                    </div>
+                    <div class="zeitplan-item">
+                        <span>Erste Gare:</span>
+                        <span class="zeit" id="erste-gare-zeit">45-60 Min</span>
+                    </div>
+                    <div class="zeitplan-item">
+                        <span>Stückgare:</span>
+                        <span class="zeit">1-1,5h</span>
+                    </div>
+                    <div class="zeitplan-item">
+                        <span>Backzeit (200°C):</span>
+                        <span class="zeit" id="back-zeit">30-35 Min</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="recipe">
+            <div class="recipe-section section-sauerteig">
+                <h2>1. Sauerteig herstellen (am Vorabend)</h2>
+                <div class="recipe-content">
+                    <div>
+                        <h4>Zutaten:</h4>
+                        <ul class="zutat-liste">
+                            <li><span id="anstellgut-menge">120</span>g Anstellgut</li>
+                            <li><span id="sauerteig-mehl">240</span>g Roggen-Vollkornmehl</li>
+                            <li><span id="sauerteig-wasser">240</span>ml Wasser</li>
+                        </ul>
+                        <p style="margin-top: 15px; font-size: 0.9rem; color: #2b6cb0;">
+                            → Ergebnis: ca. <span id="sauerteig-gesamt">600</span>g aktiver Sauerteig<br>
+                            → Benötigt: <span id="sauerteig-benoetigt">600</span>g für das Rezept
+                        </p>
+                    </div>
+                    <div>
+                        <h4>Zeit & Temperatur:</h4>
+                        <p>🌡️ <span id="temp-anzeige">22</span>°C: <strong id="zeit-anzeige">8-10h</strong></p>
+                        <div id="temp-hinweise"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recipe-section section-hauptteig">
+                <h2>2. Hauptteig</h2>
+                <div class="recipe-content">
+                    <div>
+                        <h4>Zutaten:</h4>
+                        <ul class="zutat-liste">
+                            <li><span id="hauptteig-sauerteig">600</span>g aktiver Sauerteig</li>
+                            <li id="roggen-zeile"><span id="hauptteig-roggen">252</span>g Roggen-Vollkornmehl</li>
+                            <li id="dinkel-zeile"><span id="hauptteig-dinkel">72</span>g Dinkel-Vollkornmehl</li>
+                            <li id="weizen-zeile"><span id="hauptteig-weizen">36</span>g Weizen-Vollkornmehl</li>
+                            <li id="buchweizen-zeile" style="display: none;"><span id="hauptteig-buchweizen">0</span>g Buchweizenmehl</li>
+                            <li><span id="hauptteig-wasser">200</span>ml warmes Wasser</li>
+                            <li><span id="hauptteig-salz">14</span>g Salz</li>
+                            <li><span id="hauptteig-kuemmel">1,5</span> TL Kümmel (optional)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div style="margin-bottom: 15px;">
+                            <span style="font-weight: 600;">Autolyse:</span>
+                            <span style="color: #d69e2e; margin-left: 8px;" id="autolyse-zeit">45-60 Min</span>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <span style="font-weight: 600;">Erste Gare:</span>
+                            <span style="color: #d69e2e; margin-left: 8px;" id="erste-gare-anzeige">45-60 Min</span>
+                        </div>
+                        <div style="font-size: 0.8rem; color: #4a5568; margin-top: 15px;">
+                            <p>Gesamt Mehl: <span id="gesamt-mehl">360</span>g</p>
+                            <p>Hydration: <span id="hydration">70</span>%</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="recipe-section section-backen">
+                <h2>3. Formen & Backen</h2>
+                <div class="recipe-content">
+                    <div>
+                        <h4>Formen:</h4>
+                        <p>Mit feuchten Händen rundwirken → In bemehlten Gärkorb</p>
+                        
+                        <h4 style="margin-top: 20px;">Stückgare & Backvorbereitung:</h4>
+                        <p>Stückgare: <strong>1-1,5h</strong><br>
+                        Ofen auf 250°C vorheizen (30-40 Min)</p>
+                    </div>
+                    <div>
+                        <h4>Backen:</h4>
+                        <ul class="zutat-liste">
+                            <li>Stürzen und kreuzförmig einschneiden</li>
+                            <li>15 Min bei 250°C mit Dampf</li>
+                            <li id="back-zeit-anzeige">30-35 Min bei 200°C ohne Dampf</li>
+                            <li>Mittlere Schiene verwenden!</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ergebnis-info">
+                <h3>🍞 Erwartetes Ergebnis:</h3>
+                <div class="ergebnis-grid">
+                    <div>
+                        <h4 style="margin: 0 0 8px 0; color: #744210;">Krume:</h4>
+                        <p id="krume-beschreibung" style="margin: 0; color: #4a5568;">Ausgewogen</p>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0 0 8px 0; color: #744210;">Geschmack:</h4>
+                        <p id="geschmack-beschreibung" style="margin: 0; color: #4a5568;">Ausgewogen</p>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0 0 8px 0; color: #744210;">Haltbarkeit:</h4>
+                        <p id="haltbarkeit-beschreibung" style="margin: 0; color: #4a5568;">3-5 Tage</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tipps">
+                <h3>💡 Wichtige Tipps:</h3>
+                <ul>
+                    <li>Fingertest: Delle federt nur zur Hälfte zurück = fertig</li>
+                    <li>Bei viel Roggen: immer mit feuchten Händen arbeiten</li>
+                    <li>Lieber etwas früher als zu spät backen</li>
+                    <li>Klopftest: Fertiges Brot klingt hohl</li>
+                    <li>Nach dem Backen mindestens 2h auskühlen lassen</li>
+                    <li>Je höher der Roggen-Anteil, desto kompakter das Brot</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const mehlMischungen = {
+            'roggen-pur': { roggen: 100, dinkel: 0, weizen: 0, buchweizen: 0, name: 'Reines Roggen', beschreibung: 'Traditionell, kräftig, kompakt', eigenschaften: 'Sehr kompakt, intensiver Geschmack' },
+            'roggen-optimal': { roggen: 70, dinkel: 20, weizen: 10, buchweizen: 0, name: 'Roggen Optimal', beschreibung: 'Beste Balance: Geschmack + Lockerung', eigenschaften: 'Ausgewogen, gut aufgehend' },
+            'roggen-dinkel': { roggen: 60, dinkel: 40, weizen: 0, buchweizen: 0, name: 'Roggen-Dinkel', beschreibung: 'Nussig, bekömmlich, lockerer', eigenschaften: 'Nussiges Aroma, gute Verdaulichkeit' },
+            'roggen-weizen': { roggen: 70, dinkel: 0, weizen: 30, buchweizen: 0, name: 'Roggen-Weizen', beschreibung: 'Luftig, mild, familienfreundlich', eigenschaften: 'Sehr locker, milder Geschmack' },
+            'vollkorn-mix': { roggen: 50, dinkel: 30, weizen: 15, buchweizen: 5, name: 'Vollkorn-Mix', beschreibung: 'Komplex, nährstoffreich, herzhaft', eigenschaften: 'Komplexer Geschmack, sehr nährstoffreich' },
+            'buchweizen-spezial': { roggen: 60, dinkel: 20, weizen: 5, buchweizen: 15, name: 'Buchweizen Spezial', beschreibung: 'Glutenfrei-Anteil, nussig, dunkel', eigenschaften: 'Dunkle Farbe, erdiger Geschmack' },
+            'mild-luftig': { roggen: 40, dinkel: 30, weizen: 30, buchweizen: 0, name: 'Mild & Luftig', beschreibung: 'Für Einsteiger, sehr locker', eigenschaften: 'Sehr locker, mild, toast-geeignet' },
+            'power-vollkorn': { roggen: 45, dinkel: 25, weizen: 20, buchweizen: 10, name: 'Power Vollkorn', beschreibung: 'Maximum an Nährstoffen', eigenschaften: 'Sehr nährstoffreich, kräftig' }
+        };
+
+        const el = {
+            anstellgut: document.getElementById('anstellgut'),
+            anstellgutWert: document.getElementById('anstellgut-wert'),
+            sauerteigTemp: document.getElementById('sauerteig-temp'),
+            sauerteigTempWert: document.getElementById('sauerteig-temp-wert'),
+            gareTemp: document.getElementById('gare-temp'),
+            gareTempWert: document.getElementById('gare-temp-wert'),
+            brotGroesse: document.getElementById('brot-groesse'),
+            brotGroesseWert: document.getElementById('brot-groesse-wert'),
+            hydrationSlider: document.getElementById('hydration-slider'),
+            hydrationWert: document.getElementById('hydration-wert'),
+            hydrationHinweis: document.getElementById('hydration-hinweis'),
+            mehlMischung: document.getElementById('mehl-mischung'),
+            customControls: document.getElementById('custom-controls'),
+            customRoggen: document.getElementById('custom-roggen'),
+            customRoggenWert: document.getElementById('custom-roggen-wert'),
+            customDinkel: document.getElementById('custom-dinkel'),
+            customDinkelWert: document.getElementById('custom-dinkel-wert'),
+            customWeizen: document.getElementById('custom-weizen'),
+            customWeizenWert: document.getElementById('custom-weizen-wert'),
+            customBuchweizen: document.getElementById('custom-buchweizen'),
+            customBuchweizenWert: document.getElementById('custom-buchweizen-wert'),
+            summeAnzeige: document.getElementById('summe-anzeige'),
+            normalizeBtn: document.getElementById('normalize-btn')
+        };
+
+        el.anstellgut.addEventListener('input', e => { el.anstellgutWert.textContent = e.target.value; berechneRezept(); });
+        el.sauerteigTemp.addEventListener('input', e => { el.sauerteigTempWert.textContent = e.target.value; berechneRezept(); });
+        el.gareTemp.addEventListener('input', e => { el.gareTempWert.textContent = e.target.value; berechneRezept(); });
+        el.brotGroesse.addEventListener('input', e => { el.brotGroesseWert.textContent = e.target.value; berechneRezept(); });
+        el.hydrationSlider.addEventListener('input', e => { el.hydrationWert.textContent = e.target.value; markiereHydrationAenderung(); berechneRezept(); });
+        
+        el.mehlMischung.addEventListener('change', () => {
+            el.customControls.style.display = el.mehlMischung.value === 'custom' ? 'block' : 'none';
+            if (el.mehlMischung.value !== 'custom') aktualisiereGewaehlteMischung();
+            setzeOptimaleHydration();
+            berechneRezept();
+        });
+
+        el.customRoggen.addEventListener('input', e => { el.customRoggenWert.textContent = e.target.value; aktualisiereCustomSumme(); setzeOptimaleHydration(); berechneRezept(); });
+        el.customDinkel.addEventListener('input', e => { el.customDinkelWert.textContent = e.target.value; aktualisiereCustomSumme(); setzeOptimaleHydration(); berechneRezept(); });
+        el.customWeizen.addEventListener('input', e => { el.customWeizenWert.textContent = e.target.value; aktualisiereCustomSumme(); setzeOptimaleHydration(); berechneRezept(); });
+        el.customBuchweizen.addEventListener('input', e => { el.customBuchweizenWert.textContent = e.target.value; aktualisiereCustomSumme(); setzeOptimaleHydration(); berechneRezept(); });
+        el.normalizeBtn.addEventListener('click', normalisiereCustomWerte);
+
+        document.getElementById('save-btn').addEventListener('click', speichereRezept);
+        document.getElementById('load-btn').addEventListener('click', ladeRezept);
+
+        function berechneOptimaleHydration(anteile) {
+            const hydrationWerte = { roggen: 68, dinkel: 75, weizen: 72, buchweizen: 85 };
+            return Math.round((anteile.roggen * hydrationWerte.roggen + anteile.dinkel * hydrationWerte.dinkel + anteile.weizen * hydrationWerte.weizen + anteile.buchweizen * hydrationWerte.buchweizen) / 100);
+        }
+
+        function setzeOptimaleHydration() {
+            const anteile = getMehlAnteile();
+            const optimaleHydration = berechneOptimaleHydration(anteile);
+            el.hydrationSlider.value = optimaleHydration;
+            el.hydrationWert.textContent = optimaleHydration;
+            el.hydrationHinweis.style.display = 'inline';
+            el.hydrationHinweis.textContent = '●empfohlen';
+            el.hydrationHinweis.style.color = '#48bb78';
+        }
+
+        function markiereHydrationAenderung() {
+            const anteile = getMehlAnteile();
+            const optimaleHydration = berechneOptimaleHydration(anteile);
+            const aktuelleHydration = parseInt(el.hydrationSlider.value);
+            if (Math.abs(aktuelleHydration - optimaleHydration) <= 2) {
+                el.hydrationHinweis.textContent = '●empfohlen';
+                el.hydrationHinweis.style.color = '#48bb78';
+            } else {
+                el.hydrationHinweis.textContent = '●angepasst';
+                el.hydrationHinweis.style.color = '#d69e2e';
+            }
+        }
+
+        function aktualisiereGewaehlteMischung() {
+            const mischung = mehlMischungen[el.mehlMischung.value];
+            if (mischung) {
+                document.getElementById('mischung-name').textContent = mischung.name;
+                document.getElementById('mischung-beschreibung').textContent = mischung.beschreibung;
+                document.getElementById('mischung-eigenschaften').innerHTML = '<strong>Eigenschaften:</strong> ' + mischung.eigenschaften;
+                document.getElementById('mehl-anteile').innerHTML = `<div>🟫 Roggen: ${mischung.roggen}%</div><div>🟤 Dinkel: ${mischung.dinkel}%</div><div>🟡 Weizen: ${mischung.weizen}%</div><div>⚫ Buchweizen: ${mischung.buchweizen}%</div>`;
+            }
+        }
+
+        function aktualisiereCustomSumme() {
+            const summe = parseInt(el.customRoggen.value) + parseInt(el.customDinkel.value) + parseInt(el.customWeizen.value) + parseInt(el.customBuchweizen.value);
+            el.summeAnzeige.textContent = `Summe: ${summe}%`;
+            if (summe !== 100) {
+                el.summeAnzeige.style.color = '#e53e3e';
+                el.normalizeBtn.style.display = 'inline-block';
+            } else {
+                el.summeAnzeige.style.color = '#48bb78';
+                el.normalizeBtn.style.display = 'none';
+            }
+        }
+
+        function normalisiereCustomWerte() {
+            const werte = {
+                roggen: parseInt(el.customRoggen.value),
+                dinkel: parseInt(el.customDinkel.value),
+                weizen: parseInt(el.customWeizen.value),
+                buchweizen: parseInt(el.customBuchweizen.value)
+            };
+            const summe = werte.roggen + werte.dinkel + werte.weizen + werte.buchweizen;
+            if (summe > 0) {
+                const norm = {
+                    roggen: Math.round((werte.roggen / summe) * 100),
+                    dinkel: Math.round((werte.dinkel / summe) * 100),
+                    weizen: Math.round((werte.weizen / summe) * 100),
+                    buchweizen: Math.round((werte.buchweizen / summe) * 100)
+                };
+                const neueSumme = norm.roggen + norm.dinkel + norm.weizen + norm.buchweizen;
+                if (neueSumme !== 100) norm.roggen += (100 - neueSumme);
+                el.customRoggen.value = norm.roggen;
+                el.customRoggenWert.textContent = norm.roggen;
+                el.customDinkel.value = norm.dinkel;
+                el.customDinkelWert.textContent = norm.dinkel;
+                el.customWeizen.value = norm.weizen;
+                el.customWeizenWert.textContent = norm.weizen;
+                el.customBuchweizen.value = norm.buchweizen;
+                el.customBuchweizenWert.textContent = norm.buchweizen;
+                aktualisiereCustomSumme();
+                berechneRezept();
+            }
+        }
+
+        function berechneZeitplan(temp) {
+            if (temp <= 20) return { sauerteigZeit: "10-12h", gareZeit: "45-60 Min" };
+            if (temp <= 24) return { sauerteigZeit: "8-10h", gareZeit: "45-60 Min" };
+            if (temp <= 28) return { sauerteigZeit: "6-8h", gareZeit: "35-50 Min" };
+            return { sauerteigZeit: "4-6h", gareZeit: "25-35 Min" };
+        }
+
+        function getMehlAnteile() {
+            if (el.mehlMischung.value === 'custom') {
+                return {
+                    roggen: parseInt(el.customRoggen.value),
+                    dinkel: parseInt(el.customDinkel.value),
+                    weizen: parseInt(el.customWeizen.value),
+                    buchweizen: parseInt(el.customBuchweizen.value)
+                };
+            }
+            return mehlMischungen[el.mehlMischung.value];
+        }
+
+        function berechneBrotEigenschaften(anteile) {
+            const r = anteile.roggen, b = anteile.buchweizen, w = anteile.weizen;
+            let krume, geschmack, haltbarkeit;
+            if (r >= 80) {
+                krume = "Sehr kompakt, dichte Krume";
+                geschmack = "Kräftig-säuerlich, traditionell";
+                haltbarkeit = "5-7 Tage";
+            } else if (r >= 60) {
+                krume = "Kompakt, mitteldichte Krume";
+                geschmack = "Mittel-kräftig, ausgewogen";
+                haltbarkeit = "4-5 Tage";
+            } else if (r >= 40) {
+                krume = "Ausgewogen, mittel-locker";
+                geschmack = "Mild-kräftig, harmonisch";
+                haltbarkeit = "3-4 Tage";
+            } else {
+                krume = "Locker, luftige Krume";
+                geschmack = "Mild, leicht säuerlich";
+                haltbarkeit = "2-3 Tage";
+            }
+            if (b > 10) {
+                krume += ", erdige Note";
+                geschmack += ", nussig-erdig";
+            }
+            if (w > 25) krume = krume.replace("kompakt", "lockerer");
+            return { krume, geschmack, haltbarkeit };
+        }
+
+        function berechneRezept() {
+            const anstellgut = parseInt(el.anstellgut.value);
+            const temp = parseInt(el.sauerteigTemp.value);
+            const brotGroesse = parseInt(el.brotGroesse.value);
+            const zielHydration = parseInt(el.hydrationSlider.value);
+            const anteile = getMehlAnteile();
+            
+            const sauerteigMehl = anstellgut * 2;
+            const sauerteigWasser = anstellgut * 2;
+            const sauerteigGesamt = anstellgut + sauerteigMehl + sauerteigWasser;
+            
+            const skalierung = (sauerteigGesamt / 600) * (brotGroesse / 1200);
+            
+            const gesamtMehl = Math.round(360 * skalierung);
+            const roggenMehl = Math.round((gesamtMehl * anteile.roggen) / 100);
+            const dinkelMehl = Math.round((gesamtMehl * anteile.dinkel) / 100);
+            const weizenMehl = Math.round((gesamtMehl * anteile.weizen) / 100);
+            const buchweizenMehl = Math.round((gesamtMehl * anteile.buchweizen) / 100);
+            
+            const gesamtMehlGesamt = sauerteigMehl + gesamtMehl;
+            const gesamtWasserZiel = Math.round((gesamtMehlGesamt * zielHydration) / 100);
+            const hauptteigWasser = Math.max(0, gesamtWasserZiel - sauerteigWasser);
+            
+            const salz = Math.round(14 * skalierung);
+            const kuemmel = (1.5 * skalierung).toFixed(1);
+            
+            const tatsaechlicheBrotgroesse = Math.round(sauerteigGesamt + gesamtMehl + hauptteigWasser + salz);
+            const hydration = Math.round(((sauerteigWasser + hauptteigWasser) / gesamtMehlGesamt) * 100);
+            
+            const zeitplan = berechneZeitplan(temp);
+            const ersteGareZeitplan = berechneZeitplan(22);
+            
+            let backZeit;
+            if (tatsaechlicheBrotgroesse <= 800) {
+                backZeit = "25-30 Min";
+            } else if (tatsaechlicheBrotgroesse <= 1500) {
+                backZeit = "30-35 Min";
+            } else {
+                backZeit = "35-40 Min";
+            }
+            
+            document.getElementById('anstellgut-menge').textContent = anstellgut;
+            document.getElementById('sauerteig-mehl').textContent = sauerteigMehl;
+            document.getElementById('sauerteig-wasser').textContent = sauerteigWasser;
+            document.getElementById('sauerteig-gesamt').textContent = sauerteigGesamt;
+            document.getElementById('sauerteig-benoetigt').textContent = sauerteigGesamt;
+            document.getElementById('hauptteig-sauerteig').textContent = sauerteigGesamt;
+            document.getElementById('hauptteig-roggen').textContent = roggenMehl;
+            document.getElementById('hauptteig-dinkel').textContent = dinkelMehl;
+            document.getElementById('hauptteig-weizen').textContent = weizenMehl;
+            document.getElementById('hauptteig-buchweizen').textContent = buchweizenMehl;
+            document.getElementById('hauptteig-wasser').textContent = hauptteigWasser;
+            document.getElementById('hauptteig-salz').textContent = salz;
+            document.getElementById('hauptteig-kuemmel').textContent = kuemmel;
+            document.getElementById('gesamt-mehl').textContent = gesamtMehl;
+            document.getElementById('hydration').textContent = hydration;
+            el.brotGroesseWert.textContent = tatsaechlicheBrotgroesse;
+            document.getElementById('temp-anzeige').textContent = temp;
+            document.getElementById('zeit-anzeige').textContent = zeitplan.sauerteigZeit;
+            document.getElementById('sauerteig-zeit').textContent = zeitplan.sauerteigZeit;
+            document.getElementById('erste-gare-zeit').textContent = ersteGareZeitplan.gareZeit;
+            document.getElementById('erste-gare-anzeige').textContent = ersteGareZeitplan.gareZeit;
+            document.getElementById('back-zeit').textContent = backZeit;
+            document.getElementById('back-zeit-anzeige').textContent = backZeit + " bei 200°C ohne Dampf";
+            
+            document.getElementById('roggen-zeile').style.display = roggenMehl > 0 ? 'flex' : 'none';
+            document.getElementById('dinkel-zeile').style.display = dinkelMehl > 0 ? 'flex' : 'none';
+            document.getElementById('weizen-zeile').style.display = weizenMehl > 0 ? 'flex' : 'none';
+            document.getElementById('buchweizen-zeile').style.display = buchweizenMehl > 0 ? 'flex' : 'none';
+            
+            const eigenschaften = berechneBrotEigenschaften(anteile);
+            document.getElementById('krume-beschreibung').textContent = eigenschaften.krume;
+            document.getElementById('geschmack-beschreibung').textContent = eigenschaften.geschmack;
+            document.getElementById('haltbarkeit-beschreibung').textContent = eigenschaften.haltbarkeit;
+            
+            let tempHinweise = temp < 20 ? "❄️ Kühl - längere Reifezeit" : temp > 28 ? "🔥 Warm - Vorsicht vor Überreife!" : "🌡️ Optimal";
+            document.getElementById('temp-hinweise').innerHTML = `<p style="font-size: 0.8rem; color: #4a5568; margin-top: 10px;">${tempHinweise}</p>`;
+            
+            let autolyseZeit = anteile.roggen >= 80 ? "30-45 Min" : anteile.weizen >= 30 ? "60-90 Min" : "45-60 Min";
+            document.getElementById('autolyse-zeit').textContent = autolyseZeit;
+        }
+
+        function speichereRezept() {
+            const rezeptName = prompt('Gib deinem Rezept einen Namen:', 'Mein Sauerteigbrot');
+            if (!rezeptName) return;
+            const rezeptDaten = {
+                name: rezeptName,
+                datum: new Date().toLocaleDateString('de-DE'),
+                einstellungen: {
+                    anstellgut: el.anstellgut.value,
+                    sauerteigTemp: el.sauerteigTemp.value,
+                    gareTemp: el.gareTemp.value,
+                    brotGroesse: el.brotGroesse.value,
+                    hydration: el.hydrationSlider.value,
+                    mehlMischung: el.mehlMischung.value,
+                    customRoggen: el.customRoggen.value,
+                    customDinkel: el.customDinkel.value,
+                    customWeizen: el.customWeizen.value,
+                    customBuchweizen: el.customBuchweizen.value
+                }
+            };
+            let gespeicherteRezepte = JSON.parse(localStorage.getItem('sauerteigRezepte') || '[]');
+            gespeicherteRezepte.push(rezeptDaten);
+            localStorage.setItem('sauerteigRezepte', JSON.stringify(gespeicherteRezepte));
+            alert(`✅ Rezept "${rezeptName}" wurde gespeichert!`);
+        }
+
+        function ladeRezept() {
+            const gespeicherteRezepte = JSON.parse(localStorage.getItem('sauerteigRezepte') || '[]');
+            if (gespeicherteRezepte.length === 0) {
+                alert('Keine gespeicherten Rezepte gefunden.');
+                return;
+            }
+            let auswahlText = 'Wähle ein Rezept zum Laden:\n\n';
+            gespeicherteRezepte.forEach((r, i) => {
+                auswahlText += `${i + 1}. ${r.name} (${r.datum})\n`;
+            });
+            auswahlText += `\n${gespeicherteRezepte.length + 1}. ❌ Alle Rezepte löschen`;
+            const auswahl = prompt(auswahlText, '1');
+            if (!auswahl) return;
+            const index = parseInt(auswahl) - 1;
+            if (index === gespeicherteRezepte.length) {
+                if (confirm('Wirklich ALLE gespeicherten Rezepte löschen?')) {
+                    localStorage.removeItem('sauerteigRezepte');
+                    alert('✅ Alle Rezepte wurden gelöscht.');
+                }
+                return;
+            }
+            if (index < 0 || index >= gespeicherteRezepte.length) {
+                alert('Ungültige Auswahl.');
+                return;
+            }
+            const rezept = gespeicherteRezepte[index];
+            const e = rezept.einstellungen;
+            el.anstellgut.value = e.anstellgut;
+            el.anstellgutWert.textContent = e.anstellgut;
+            el.sauerteigTemp.value = e.sauerteigTemp;
+            el.sauerteigTempWert.textContent = e.sauerteigTemp;
+            el.gareTemp.value = e.gareTemp;
+            el.gareTempWert.textContent = e.gareTemp;
+            el.brotGroesse.value = e.brotGroesse;
+            el.brotGroesseWert.textContent = e.brotGroesse;
+            el.hydrationSlider.value = e.hydration;
+            el.hydrationWert.textContent = e.hydration;
+            el.mehlMischung.value = e.mehlMischung;
+            if (e.mehlMischung === 'custom') {
+                el.customControls.style.display = 'block';
+                el.customRoggen.value = e.customRoggen;
+                el.customRoggenWert.textContent = e.customRoggen;
+                el.customDinkel.value = e.customDinkel;
+                el.customDinkelWert.textContent = e.customDinkel;
+                el.customWeizen.value = e.customWeizen;
+                el.customWeizenWert.textContent = e.customWeizen;
+                el.customBuchweizen.value = e.customBuchweizen;
+                el.customBuchweizenWert.textContent = e.customBuchweizen;
+                aktualisiereCustomSumme();
+            } else {
+                el.customControls.style.display = 'none';
+                aktualisiereGewaehlteMischung();
+            }
+            markiereHydrationAenderung();
+            berechneRezept();
+            alert(`✅ Rezept "${rezept.name}" wurde geladen!`);
+        }
+
+        aktualisiereGewaehlteMischung();
+        setzeOptimaleHydration();
+        berechneRezept();
+    </script>
+</body>
+</html>
