@@ -779,15 +779,21 @@
 
             let autolyseZeit, autolyseMethode, autolyseHinweis;
             const glutenAnteil = anteile.dinkel + anteile.weizen + anteile.buchweizen;
+            let autolyseZeitFaktor = 1;
+            if (temp < 20) {
+                autolyseZeitFaktor = 1.3; // Länger bei Kälte
+            } else if (temp > 26) {
+                autolyseZeitFaktor = 0.7; // Kürzer bei Wärme
+            }
             
             if (anteile.roggen >= 70) {
                 // Roggen-dominant: Einfache Autolyse
-                autolyseZeit = "30-45 Min";
+                autolyseZeit = Math.round(30 * autolyseZeitFaktor) + "-" + Math.round(45 * autolyseZeitFaktor) + " Min";
                 autolyseMethode = "einfach";
                 autolyseHinweis = "Alle Zutaten zusammen (ohne Salz) → 30-45 Min ruhen lassen";
             } else if (glutenAnteil >= 30 && anteile.roggen >= 40) {
                 // Mischbrot: Getrennte Autolyse sinnvoll
-                autolyseZeit = "45-60 Min";
+                autolyseZeit = Math.round(45 * autolyseZeitFaktor) + "-" + Math.round(60 * autolyseZeitFaktor) + " Min";
                 autolyseMethode = "getrennt";
                 
                 // Wasseraufteilung berechnen - nur für Glutenmehl
@@ -814,7 +820,7 @@
                     <span style="margin-left: 20px;">Beide Teile vereinen + ${salz}g Salz → kurz kneten</span>`;
             } else if (glutenAnteil >= 50) {
                 // Gluten-dominant: Klassische Autolyse
-                autolyseZeit = "60-90 Min";
+                autolyseZeit = Math.round(60 * autolyseZeitFaktor) + "-" + Math.round(90 * autolyseZeitFaktor) + " Min";
                 autolyseMethode = "klassisch";
                 const autolyseWasser = Math.round(hauptteigWasser * 0.9);
                 const restWasser = hauptteigWasser - autolyseWasser;
@@ -823,7 +829,7 @@
                     2️⃣ Dann ${sauerteigGesamt}g Sauerteig + ${restWasser}ml Restwasser + Salz → kneten`;
             } else {
                 // Standard
-                autolyseZeit = "45-60 Min";
+                autolyseZeit = Math.round(45 * autolyseZeitFaktor) + "-" + Math.round(60 * autolyseZeitFaktor) + " Min";
                 autolyseMethode = "einfach";
                 autolyseHinweis = "Mehl + Wasser mischen → 45-60 Min ruhen<br>Dann Sauerteig + Salz zugeben → kneten";
             }
@@ -842,7 +848,7 @@
                 stueckgareZeit = "30-45 Min";
             }
             const zeitplan = berechneZeitplan(temp);
-            const ersteGareZeitplan = berechneZeitplan(22);
+            const ersteGareZeitplan = berechneZeitplan(gareTemp);
             
             let backZeit;
             if (tatsaechlicheBrotgroesse <= 800) {
