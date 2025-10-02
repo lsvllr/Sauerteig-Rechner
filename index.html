@@ -422,16 +422,15 @@
                         <span class="zeit" id="sauerteig-zeit">8-10h</span>
                     </div>
                     <div class="zeitplan-item">
-                        <span>Autolyse:</span>
-                        <span class="zeit" id="autolyse-zeit">45-60 Min</span>
+                        <span id="plan-autolyse">45-60 Min</span> 
+                        <span id="plan-autolyse-typ" style="color: #718096; font-size: 0.75rem;">(einfach)</span>
                     </div>
                     <div class="zeitplan-item">
                         <span>Erste Gare:</span>
                         <span class="zeit" id="erste-gare-zeit">45-60 Min</span>
                     </div>
                     <div class="zeitplan-item">
-                        <span>Stückgare:</span>
-                        <span class="zeit">1-1,5h</span>
+                         <span id="plan-stueckgare">1-1,5h</span> bei <span id="plan-gare-temp">30</span>°C<br>
                     </div>
                     <div class="zeitplan-item">
                         <span>Backzeit (200°C):</span>
@@ -494,6 +493,10 @@
                             <p>Gesamt Mehl: <span id="gesamt-mehl">360</span>g</p>
                             <p>Hydration: <span id="hydration">70</span>%</p>
                         </div>
+                        <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                            <h5 style="margin: 0 0 10px 0; color: #1e40af; font-size: 0.95rem;">📋 Autolyse-Methode:</h5>
+                            <div id="autolyse-hinweis" style="font-size: 0.8rem; color: #1e3a8a; line-height: 1.7;"></div>
+                        </div>        
                     </div>
                 </div>
             </div>
@@ -768,7 +771,18 @@
             
             const tatsaechlicheBrotgroesse = Math.round(sauerteigGesamt + gesamtMehl + hauptteigWasser + salz);
             const hydration = Math.round(((sauerteigWasser + hauptteigWasser) / gesamtMehlGesamt) * 100);
-            
+
+            const gareTemp = parseInt(el.gareTemp.value);
+            let stueckgareZeit;
+            if (gareTemp <= 22) {
+                stueckgareZeit = "1,5-2h";
+            } else if (gareTemp <= 26) {
+                stueckgareZeit = "1-1,5h";
+            } else if (gareTemp <= 30) {
+                stueckgareZeit = "45-60 Min";
+            } else {
+                stueckgareZeit = "30-45 Min";
+            }
             const zeitplan = berechneZeitplan(temp);
             const ersteGareZeitplan = berechneZeitplan(22);
             
@@ -802,9 +816,14 @@
             document.getElementById('sauerteig-zeit').textContent = zeitplan.sauerteigZeit;
             document.getElementById('erste-gare-zeit').textContent = ersteGareZeitplan.gareZeit;
             document.getElementById('erste-gare-anzeige').textContent = ersteGareZeitplan.gareZeit;
+            document.getElementById('plan-stueckgare').textContent = stueckgareZeit;
+            document.getElementById('plan-gare-temp').textContent = gareTemp;
             document.getElementById('back-zeit').textContent = backZeit;
             document.getElementById('back-zeit-anzeige').textContent = backZeit + " bei 200°C ohne Dampf";
-            
+
+            document.getElementById('plan-autolyse-typ').textContent = 
+                autolyseMethode === 'getrennt' ? '(getrennt - siehe unten!)' : 
+                autolyseMethode === 'klassisch' ? '(klassisch)' : '(einfach)';
             document.getElementById('roggen-zeile').style.display = roggenMehl > 0 ? 'flex' : 'none';
             document.getElementById('dinkel-zeile').style.display = dinkelMehl > 0 ? 'flex' : 'none';
             document.getElementById('weizen-zeile').style.display = weizenMehl > 0 ? 'flex' : 'none';
@@ -818,8 +837,59 @@
             let tempHinweise = temp < 20 ? "❄️ Kühl - längere Reifezeit" : temp > 28 ? "🔥 Warm - Vorsicht vor Überreife!" : "🌡️ Optimal";
             document.getElementById('temp-hinweise').innerHTML = `<p style="font-size: 0.8rem; color: #4a5568; margin-top: 10px;">${tempHinweise}</p>`;
             
-            let autolyseZeit = anteile.roggen >= 80 ? "30-45 Min" : anteile.weizen >= 30 ? "60-90 Min" : "45-60 Min";
+            let autolyseZeit, autolyseMethode, autolyseHinweis;
+            const glutenAnteil = anteile.dinkel + anteile.weizen + anteile.buchweizen;
+            
+            if (anteile.roggen >= 70) {
+                // Roggen-dominant: Einfache Autolyse
+                autolyseZeit = "30-45 Min";
+                autolyseMethode = "einfach";
+                autolyseHinweis = "Alle Zutaten zusammen (ohne Salz) → 30-45 Min ruhen lassen";
+            } else if (glutenAnteil >= 30 && anteile.roggen >= 40) {
+                // Mischbrot: Getrennte Autolyse sinnvoll
+                autolyseZeit = "45-60 Min";
+                autolyseMethode = "getrennt";
+                
+                // Wasseraufteilung berechnen - nur für Glutenmehl
+                const dinkelWasser = Math.round((dinkelMehl / gesamtMehl) * hauptteigWasser);
+                const weizenWasser = Math.round((weizenMehl / gesamtMehl) * hauptteigWasser);
+                const buchweizenWasser = Math.round((buchweizenMehl / gesamtMehl) * hauptteigWasser);
+                const glutenWasser = dinkelWasser + weizenWasser + buchweizenWasser;
+                const roggenWasser = hauptteigWasser - glutenWasser;
+                
+                // Mehle für Anzeige zusammenstellen
+                let glutenMehle = [];
+                if (dinkelMehl > 0) glutenMehle.push(dinkelMehl + 'g Dinkel');
+                if (weizenMehl > 0) glutenMehle.push(weizenMehl + 'g Weizen');
+                if (buchweizenMehl > 0) glutenMehle.push(buchweizenMehl + 'g Buchweizen');
+                
+                autolyseHinweis = `<strong>Getrennte Autolyse (nur Glutenmehl!):</strong><br><br>
+                    <span style="color: #059669; font-weight: 600;">1️⃣ Autolyse-Teil:</span><br>
+                    <span style="margin-left: 20px;">${glutenMehle.join(' + ')} + ${glutenWasser}ml Wasser</span><br>
+                    <span style="margin-left: 20px; font-size: 0.75rem; color: #047857;">→ Mischen und ${autolyseZeit} ruhen lassen</span><br><br>
+                    <span style="color: #dc2626; font-weight: 600;">2️⃣ Roggen-Teil (OHNE Autolyse!):</span><br>
+                    <span style="margin-left: 20px;">${roggenMehl}g Roggenmehl + ${sauerteigGesamt}g Sauerteig + ${roggenWasser}ml Wasser</span><br>
+                    <span style="margin-left: 20px; font-size: 0.75rem; color: #b91c1c;">→ Nur kurz verrühren, NICHT kneten, NICHT ruhen!</span><br><br>
+                    <span style="color: #7c3aed; font-weight: 600;">3️⃣ Nach Autolyse:</span><br>
+                    <span style="margin-left: 20px;">Beide Teile vereinen + ${salz}g Salz → kurz kneten</span>`;
+            } else if (glutenAnteil >= 50) {
+                // Gluten-dominant: Klassische Autolyse
+                autolyseZeit = "60-90 Min";
+                autolyseMethode = "klassisch";
+                const autolyseWasser = Math.round(hauptteigWasser * 0.9);
+                const restWasser = hauptteigWasser - autolyseWasser;
+                autolyseHinweis = `<strong>Klassische Autolyse:</strong><br>
+                    1️⃣ ${gesamtMehl}g Mehl + ${autolyseWasser}ml Wasser → ${autolyseZeit} ruhen<br>
+                    2️⃣ Dann ${sauerteigGesamt}g Sauerteig + ${restWasser}ml Restwasser + Salz → kneten`;
+            } else {
+                // Standard
+                autolyseZeit = "45-60 Min";
+                autolyseMethode = "einfach";
+                autolyseHinweis = "Mehl + Wasser mischen → 45-60 Min ruhen<br>Dann Sauerteig + Salz zugeben → kneten";
+            }
+            
             document.getElementById('autolyse-zeit').textContent = autolyseZeit;
+            document.getElementById('autolyse-hinweis').innerHTML = autolyseHinweis;
         }
 
         function speichereRezept() {
