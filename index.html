@@ -842,9 +842,7 @@
                 stueckgareZeit = "30-45 Min";
             }
             const zeitplan = berechneZeitplan(temp);
-            const brottyp = el.mehlMischung.value;
-            const gareTemp = parseInt(el.gareTemp.value, 10);
-            const ersteGareZeitplan = { gareZeit: berechneStockgareZeit(brottyp, gareTemp) };
+            const ersteGareZeitplan = berechneZeitplan(22);
             
             let backZeit;
             if (tatsaechlicheBrotgroesse <= 800) {
