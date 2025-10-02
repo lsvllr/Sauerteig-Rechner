@@ -744,35 +744,6 @@
             if (w > 25) krume = krume.replace("kompakt", "lockerer");
             return { krume, geschmack, haltbarkeit };
         }
-        function berechneStockgareZeit(brottyp, gareTemp) {
-              // Brottypen: roggen-pur, roggen-optimal, roggen-dinkel, roggen-weizen, vollkorn-mix, ...
-              // gareTemp: Temperatur in °C
-              // Rückgabe: Zeitspanne als String
-              let min, max;
-              if (brottyp === "roggen-pur") {
-                if (gareTemp <= 20) { min = 75; max = 105; }
-                else if (gareTemp <= 24) { min = 60; max = 90; }
-                else if (gareTemp <= 28) { min = 40; max = 60; }
-                else { min = 30; max = 40; }
-              } else if (brottyp === "roggen-dinkel" || brottyp === "roggen-optimal"  || brottyp === "vollkorn-mix") {
-                if (gareTemp <= 20) { min = 90; max = 120; }
-                else if (gareTemp <= 24) { min = 70; max = 100; }
-                else if (gareTemp <= 28) { min = 45; max = 65; }
-                else { min = 30; max = 40; }
-              } else if (brottyp === "roggen-weizen" || brottyp === "mild-luftig" ) {
-                if (gareTemp <= 20) { min = 80; max = 110; }
-                else if (gareTemp <= 24) { min = 60; max = 85; }
-                else if (gareTemp <= 28) { min = 35; max = 55; }
-                else { min = 25; max = 38; }
-              } else {
-                // Weizen- oder Dinkelbetont
-                if (gareTemp <= 20) { min = 70; max = 100; }
-                else if (gareTemp <= 24) { min = 50; max = 80; }
-                else if (gareTemp <= 28) { min = 30; max = 50; }
-                else { min = 20; max = 32; }
-              }
-              return `${min}-${max} Min`;
-            }
 
         
         function berechneRezept() {
