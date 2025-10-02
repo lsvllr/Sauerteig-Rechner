@@ -883,6 +883,7 @@
             } else {
                 backZeit = "35-40 Min";
             }
+            let tempHinweise = temp < 20 ? "❄️ Kühl - längere Reifezeit" : temp > 28 ? "🔥 Warm - Vorsicht vor Überreife!" : "🌡️ Optimal";
             
             document.getElementById('anstellgut-menge').textContent = anstellgut;
             document.getElementById('sauerteig-mehl').textContent = sauerteigMehl;
@@ -923,7 +924,7 @@
             document.getElementById('geschmack-beschreibung').textContent = eigenschaften.geschmack;
             document.getElementById('haltbarkeit-beschreibung').textContent = eigenschaften.haltbarkeit;
             
-            let tempHinweise = temp < 20 ? "❄️ Kühl - längere Reifezeit" : temp > 28 ? "🔥 Warm - Vorsicht vor Überreife!" : "🌡️ Optimal";
+            
             document.getElementById('temp-hinweise').innerHTML = `<p style="font-size: 0.8rem; color: #4a5568; margin-top: 10px;">${tempHinweise}</p>`;
             
             
