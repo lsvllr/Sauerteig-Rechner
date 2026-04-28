@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <link rel="apple-touch-icon" href="apple-touch-icon.jpg">
-    <link rel="icon" href="apple-touch-icon.jpg">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌾 Sauerteigbrot Rechner</title>
+    <title>🌾 Multi-Mehl Sauerteigbrot Rechner</title>
     <style>
         * { box-sizing: border-box; }
         body { 
@@ -321,16 +319,24 @@
                 grid-template-columns: 1fr;
             }
         }
+        @media print {
+            body { background: white; padding: 0; }
+            .container { box-shadow: none; border-radius: 0; }
+            .header-controls, .controls input[type=range], select { display: none; }
+            .header { background: #444 !important; -webkit-print-color-adjust: exact; }
+            .section-sauerteig, .section-hauptteig, .section-backen { break-inside: avoid; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌾 Sauerteigbrot Rechner</h1>
+            <h1>🌾 Multi-Mehl Sauerteigbrot Rechner</h1>
             <p>Roggen • Dinkel • Weizen • Buchweizen</p>
             <div class="header-controls">
                 <button class="header-btn" id="save-btn">💾 Rezept speichern</button>
                 <button class="header-btn" id="load-btn">📂 Rezept laden</button>
+                <button class="header-btn" onclick="window.print()">🖨️ Drucken</button>
             </div>
         </div>
 
@@ -339,8 +345,8 @@
                 <h3>⚙️ Grundeinstellungen</h3>
                 
                 <div class="form-group">
-                    <label>Anstellgut: <span id="anstellgut-wert">100</span>g</label>
-                    <input type="range" id="anstellgut" class="slider" min="30" max="200" value="100">
+                    <label>Anstellgut: <span id="anstellgut-wert">120</span>g</label>
+                    <input type="range" id="anstellgut" class="slider" min="30" max="200" value="120">
                 </div>
                 
                 <div class="form-group">
@@ -350,12 +356,17 @@
                 
                 <div class="form-group">
                     <label>Gare-Temperatur: <span id="gare-temp-wert">30</span>°C</label>
-                    <input type="range" id="gare-temp" class="slider" min="18" max="32" value="30">
+                    <input type="range" id="gare-temp" class="slider" min="20" max="32" value="30">
                 </div>
                 
                 <div class="form-group">
                     <label>Brotgröße: <span id="brot-groesse-wert">1200</span>g</label>
                     <input type="range" id="brot-groesse" class="slider" min="600" max="2000" step="100" value="1200">
+                </div>
+
+                <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="teig-teilen" style="width:18px;height:18px;cursor:pointer;">
+                    <label for="teig-teilen" style="cursor:pointer;">Teig auf 2 Brote teilen</label>
                 </div>
                 
                 <div class="form-group">
@@ -424,20 +435,15 @@
                         <span class="zeit" id="sauerteig-zeit">8-10h</span>
                     </div>
                     <div class="zeitplan-item">
-                        <span>Autolyse:</span>
-                        <span class="zeit" id="plan-autolyse">45-60 Min</span> 
-                        
-                    </div>
-                    <div class="zeitplan-item">
                         <span>Erste Gare:</span>
                         <span class="zeit" id="erste-gare-zeit">45-60 Min</span>
                     </div>
                     <div class="zeitplan-item">
                         <span>Stückgare:</span>
-                        <span class="zeit" id="plan-stueckgare">1-1,5h</span>
+                        <span class="zeit" id="stueckgare-zeitplan">1-1,5h</span>
                     </div>
                     <div class="zeitplan-item">
-                        <span>Backzeit (200°C):</span>
+                        <span>Backzeit (220°C):</span>
                         <span class="zeit" id="back-zeit">30-35 Min</span>
                     </div>
                 </div>
@@ -446,7 +452,7 @@
 
         <div class="recipe">
             <div class="recipe-section section-sauerteig">
-                <h2>1. Sauerteig herstellen</h2>
+                <h2>1. Sauerteig herstellen (am Vorabend)</h2>
                 <div class="recipe-content">
                     <div>
                         <h4>Zutaten:</h4>
@@ -476,9 +482,9 @@
                         <ul class="zutat-liste">
                             <li><span id="hauptteig-sauerteig">600</span>g aktiver Sauerteig</li>
                             <li id="roggen-zeile"><span id="hauptteig-roggen">252</span>g Roggen-Vollkornmehl</li>
-                            <li id="dinkel-zeile" style="display: none;"><span id="hauptteig-dinkel">72</span>g Dinkel-Vollkornmehl</li>
-                            <li id="weizen-zeile" style="display: none;"><span id="hauptteig-weizen">36</span>g Weizen-Vollkornmehl</li>
-                            <li id="buchweizen-zeile" style="display: none;"><span id="hauptteig-buchweizen">10</span>g Buchweizenmehl</li>
+                            <li id="dinkel-zeile"><span id="hauptteig-dinkel">72</span>g Dinkel-Vollkornmehl</li>
+                            <li id="weizen-zeile"><span id="hauptteig-weizen">36</span>g Weizen-Vollkornmehl</li>
+                            <li id="buchweizen-zeile" style="display: none;"><span id="hauptteig-buchweizen">0</span>g Buchweizenmehl</li>
                             <li><span id="hauptteig-wasser">200</span>ml warmes Wasser</li>
                             <li><span id="hauptteig-salz">14</span>g Salz</li>
                             <li><span id="hauptteig-kuemmel">1,5</span> TL Kümmel (optional)</li>
@@ -497,10 +503,6 @@
                             <p>Gesamt Mehl: <span id="gesamt-mehl">360</span>g</p>
                             <p>Hydration: <span id="hydration">70</span>%</p>
                         </div>
-                        <div style="margin-top: 20px; padding: 15px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
-                            <h5 style="margin: 0 0 10px 0; color: #1e40af; font-size: 0.95rem;">📋 Autolyse-Methode:</h5>
-                            <div id="autolyse-hinweis" style="font-size: 0.8rem; color: #1e3a8a; line-height: 1.7;"></div>
-                        </div>        
                     </div>
                 </div>
             </div>
@@ -513,15 +515,15 @@
                         <p>Mit feuchten Händen rundwirken → In bemehlten Gärkorb</p>
                         
                         <h4 style="margin-top: 20px;">Stückgare & Backvorbereitung:</h4>
-                        <p>Stückgare: <strong>1-1,5h</strong><br>
+                        <p>Stückgare: <strong id="stueckgare-anzeige">1-1,5h</strong><br>
                         Ofen auf 250°C vorheizen (30-40 Min)</p>
                     </div>
                     <div>
                         <h4>Backen:</h4>
                         <ul class="zutat-liste">
                             <li>Stürzen und kreuzförmig einschneiden</li>
-                            <li>15 Min bei 250°C mit Dampf</li>
-                            <li id="back-zeit-anzeige">30-35 Min bei 200°C ohne Dampf</li>
+                            <li id="dampf-hinweis">15 Min bei 250°C <strong>mit Dampf</strong> (Schüssel über Brot oder Schwaden)</li>
+                            <li id="back-zeit-anzeige">30-35 Min bei 220°C ohne Dampf</li>
                             <li>Mittlere Schiene verwenden!</li>
                         </ul>
                     </div>
@@ -602,6 +604,7 @@
         el.sauerteigTemp.addEventListener('input', e => { el.sauerteigTempWert.textContent = e.target.value; berechneRezept(); });
         el.gareTemp.addEventListener('input', e => { el.gareTempWert.textContent = e.target.value; berechneRezept(); });
         el.brotGroesse.addEventListener('input', e => { el.brotGroesseWert.textContent = e.target.value; berechneRezept(); });
+        document.getElementById('teig-teilen').addEventListener('change', berechneRezept);
         el.hydrationSlider.addEventListener('input', e => { el.hydrationWert.textContent = e.target.value; markiereHydrationAenderung(); berechneRezept(); });
         
         el.mehlMischung.addEventListener('change', () => {
@@ -621,7 +624,7 @@
         document.getElementById('load-btn').addEventListener('click', ladeRezept);
 
         function berechneOptimaleHydration(anteile) {
-            const hydrationWerte = { roggen: 68, dinkel: 75, weizen: 72, buchweizen: 85 };
+            const hydrationWerte = { roggen: 75, dinkel: 78, weizen: 72, buchweizen: 85 };
             return Math.round((anteile.roggen * hydrationWerte.roggen + anteile.dinkel * hydrationWerte.dinkel + anteile.weizen * hydrationWerte.weizen + anteile.buchweizen * hydrationWerte.buchweizen) / 100);
         }
 
@@ -678,7 +681,10 @@
                 buchweizen: parseInt(el.customBuchweizen.value)
             };
             const summe = werte.roggen + werte.dinkel + werte.weizen + werte.buchweizen;
-            if (summe > 0) {
+            if (summe === 0) {
+                alert('Mindestens ein Mehlanteil muss größer als 0% sein.');
+                return;
+            }
                 const norm = {
                     roggen: Math.round((werte.roggen / summe) * 100),
                     dinkel: Math.round((werte.dinkel / summe) * 100),
@@ -697,14 +703,13 @@
                 el.customBuchweizenWert.textContent = norm.buchweizen;
                 aktualisiereCustomSumme();
                 berechneRezept();
-            }
         }
 
         function berechneZeitplan(temp) {
-            if (temp <= 20) return { sauerteigZeit: "10-12h", gareZeit: "45-60 Min" };
-            if (temp <= 24) return { sauerteigZeit: "8-10h", gareZeit: "45-60 Min" };
-            if (temp <= 28) return { sauerteigZeit: "6-8h", gareZeit: "35-50 Min" };
-            return { sauerteigZeit: "4-6h", gareZeit: "25-35 Min" };
+            if (temp <= 20) return { sauerteigZeit: "10-12h", gareZeit: "90-120 Min" };
+            if (temp <= 24) return { sauerteigZeit: "8-10h", gareZeit: "90-120 Min" };
+            if (temp <= 28) return { sauerteigZeit: "6-8h", gareZeit: "70-90 Min" };
+            return { sauerteigZeit: "4-6h", gareZeit: "50-70 Min" };
         }
 
         function getMehlAnteile() {
@@ -747,7 +752,6 @@
             return { krume, geschmack, haltbarkeit };
         }
 
-        
         function berechneRezept() {
             const anstellgut = parseInt(el.anstellgut.value);
             const temp = parseInt(el.sauerteigTemp.value);
@@ -776,91 +780,45 @@
             
             const tatsaechlicheBrotgroesse = Math.round(sauerteigGesamt + gesamtMehl + hauptteigWasser + salz);
             const hydration = Math.round(((sauerteigWasser + hauptteigWasser) / gesamtMehlGesamt) * 100);
-
-            const gareTemp = parseInt(el.gareTemp.value);
-
-            let autolyseZeit, autolyseMethode, autolyseHinweis;
-            const glutenAnteil = anteile.dinkel + anteile.weizen + anteile.buchweizen;
-            let autolyseZeitFaktor = 1;
-            if (temp < 20) {
-                autolyseZeitFaktor = 1.3; // Länger bei Kälte
-            } else if (temp > 26) {
-                autolyseZeitFaktor = 0.7; // Kürzer bei Wärme
-            }
             
-            if (anteile.roggen >= 70) {
-                // Roggen-dominant: Einfache Autolyse
-                autolyseZeit = Math.round(30 * autolyseZeitFaktor) + "-" + Math.round(45 * autolyseZeitFaktor) + " Min";
-                autolyseMethode = "einfach";
-                autolyseHinweis = "Alle Zutaten zusammen (ohne Salz) → 30-45 Min ruhen lassen";
-            } else if (glutenAnteil >= 30 && anteile.roggen >= 40) {
-                // Mischbrot: Getrennte Autolyse sinnvoll
-                autolyseZeit = Math.round(45 * autolyseZeitFaktor) + "-" + Math.round(60 * autolyseZeitFaktor) + " Min";
-                autolyseMethode = "getrennt";
-                
-                // Wasseraufteilung berechnen - nur für Glutenmehl
-                const dinkelWasser = Math.round((dinkelMehl / gesamtMehl) * hauptteigWasser);
-                const weizenWasser = Math.round((weizenMehl / gesamtMehl) * hauptteigWasser);
-                const buchweizenWasser = Math.round((buchweizenMehl / gesamtMehl) * hauptteigWasser);
-                const glutenWasser = dinkelWasser + weizenWasser + buchweizenWasser;
-                const roggenWasser = hauptteigWasser - glutenWasser;
-                
-                // Mehle für Anzeige zusammenstellen
-                let glutenMehle = [];
-                if (dinkelMehl > 0) glutenMehle.push(dinkelMehl + 'g Dinkel');
-                if (weizenMehl > 0) glutenMehle.push(weizenMehl + 'g Weizen');
-                if (buchweizenMehl > 0) glutenMehle.push(buchweizenMehl + 'g Buchweizen');
-                
-                autolyseHinweis = `<strong>Getrennte Autolyse (nur Glutenmehl!):</strong><br><br>
-                    <span style="color: #059669; font-weight: 600;">1️⃣ Autolyse-Teil:</span><br>
-                    <span style="margin-left: 20px;">${glutenMehle.join(' + ')} + ${glutenWasser}ml Wasser</span><br>
-                    <span style="margin-left: 20px; font-size: 0.75rem; color: #047857;">→ Mischen und ${autolyseZeit} ruhen lassen</span><br><br>
-                    <span style="color: #dc2626; font-weight: 600;">2️⃣ Roggen-Teil (OHNE Autolyse!):</span><br>
-                    <span style="margin-left: 20px;">${roggenMehl}g Roggenmehl + ${sauerteigGesamt}g Sauerteig + ${roggenWasser}ml Wasser</span><br>
-                    <span style="margin-left: 20px; font-size: 0.75rem; color: #b91c1c;">→ Nur kurz verrühren, NICHT kneten, NICHT ruhen!</span><br><br>
-                    <span style="color: #7c3aed; font-weight: 600;">3️⃣ Nach Autolyse:</span><br>
-                    <span style="margin-left: 20px;">Beide Teile vereinen + ${salz}g Salz → kurz kneten</span>`;
-            } else if (glutenAnteil >= 50) {
-                // Gluten-dominant: Klassische Autolyse
-                autolyseZeit = Math.round(60 * autolyseZeitFaktor) + "-" + Math.round(90 * autolyseZeitFaktor) + " Min";
-                autolyseMethode = "klassisch";
-                const autolyseWasser = Math.round(hauptteigWasser * 0.9);
-                const restWasser = hauptteigWasser - autolyseWasser;
-                autolyseHinweis = `<strong>Klassische Autolyse:</strong><br>
-                    1️⃣ ${gesamtMehl}g Mehl + ${autolyseWasser}ml Wasser → ${autolyseZeit} ruhen<br>
-                    2️⃣ Dann ${sauerteigGesamt}g Sauerteig + ${restWasser}ml Restwasser + Salz → kneten`;
-            } else {
-                // Standard
-                autolyseZeit = Math.round(45 * autolyseZeitFaktor) + "-" + Math.round(60 * autolyseZeitFaktor) + " Min";
-                autolyseMethode = "einfach";
-                autolyseHinweis = "Mehl + Wasser mischen → 45-60 Min ruhen<br>Dann Sauerteig + Salz zugeben → kneten";
-            }
-            
-            document.getElementById('autolyse-zeit').textContent = autolyseZeit;
-            document.getElementById('autolyse-hinweis').innerHTML = autolyseHinweis;
-            
-            let stueckgareZeit;
-            if (gareTemp <= 22) {
-                stueckgareZeit = "1,5-2h";
-            } else if (gareTemp <= 26) {
-                stueckgareZeit = "1-1,5h";
-            } else if (gareTemp <= 30) {
-                stueckgareZeit = "45-60 Min";
-            } else {
-                stueckgareZeit = "30-45 Min";
-            }
             const zeitplan = berechneZeitplan(temp);
-            const ersteGareZeitplan = berechneZeitplan(gareTemp);
+            const ersteGareZeitplan = berechneZeitplan(22);
             
+            const teigTeilen = document.getElementById('teig-teilen').checked;
+            const einzelGewicht = teigTeilen ? tatsaechlicheBrotgroesse / 2 : tatsaechlicheBrotgroesse;
+
             let backZeit;
-            if (tatsaechlicheBrotgroesse <= 800) {
-                backZeit = "25-30 Min";
-            } else if (tatsaechlicheBrotgroesse <= 1500) {
-                backZeit = "30-35 Min";
+            if (einzelGewicht <= 900) {
+                backZeit = "22-26 Min";
+            } else if (einzelGewicht <= 1500) {
+                backZeit = "28-32 Min";
             } else {
-                backZeit = "35-40 Min";
+                backZeit = "33-38 Min";
             }
-            let tempHinweise = temp < 20 ? "❄️ Kühl - längere Reifezeit" : temp > 28 ? "🔥 Warm - Vorsicht vor Überreife!" : "🌡️ Optimal";
+
+            const dampfText = teigTeilen
+                ? "10 Min bei 250°C <strong>mit Dampf</strong> (2 Brote → engere Dampfphase)"
+                : "15 Min bei 250°C <strong>mit Dampf</strong> (Schüssel über Brot oder Schwaden)";
+            const dampfEl = document.getElementById('dampf-hinweis');
+            if (dampfEl) dampfEl.innerHTML = dampfText;
+
+            // Stückgare dynamisch nach Roggenanteil & Temperatur
+            const gareTemp = parseInt(el.gareTemp.value);
+            let stueckgareBase = anteile.roggen >= 80 ? 45 : anteile.roggen >= 60 ? 60 : 90;
+            let stueckgareFaktor = gareTemp >= 28 ? 0.75 : gareTemp >= 24 ? 1.0 : 1.15;
+            let stueckgareMin = Math.round(stueckgareBase * stueckgareFaktor);
+            let stueckgareMax = Math.round((stueckgareBase + 30) * stueckgareFaktor);
+            let stueckgareText = stueckgareMin + "-" + stueckgareMax + " Min";
+            document.querySelectorAll('.zeitplan-item').forEach(item => {
+                if (item.querySelector('span:first-child') && item.querySelector('span:first-child').textContent.includes('Stückgare')) {
+                    item.querySelector('.zeit') && (item.querySelector('.zeit').textContent = stueckgareText);
+                }
+            });
+            // Update Stückgare in Backen-Sektion
+            const stueckgareEl = document.getElementById('stueckgare-anzeige');
+            if (stueckgareEl) stueckgareEl.textContent = stueckgareText;
+            const stueckgareZeitplanEl = document.getElementById('stueckgare-zeitplan');
+            if (stueckgareZeitplanEl) stueckgareZeitplanEl.textContent = stueckgareText;
             
             document.getElementById('anstellgut-menge').textContent = anstellgut;
             document.getElementById('sauerteig-mehl').textContent = sauerteigMehl;
@@ -883,14 +841,9 @@
             document.getElementById('sauerteig-zeit').textContent = zeitplan.sauerteigZeit;
             document.getElementById('erste-gare-zeit').textContent = ersteGareZeitplan.gareZeit;
             document.getElementById('erste-gare-anzeige').textContent = ersteGareZeitplan.gareZeit;
-            document.getElementById('plan-stueckgare').textContent = stueckgareZeit;
-            document.getElementById('plan-gare-temp').textContent = gareTemp;
             document.getElementById('back-zeit').textContent = backZeit;
-            document.getElementById('back-zeit-anzeige').textContent = backZeit + " bei 200°C ohne Dampf";
-
-            document.getElementById('plan-autolyse-typ').textContent = 
-                autolyseMethode === 'getrennt' ? '(getrennt - siehe unten!)' : 
-                autolyseMethode === 'klassisch' ? '(klassisch)' : '(einfach)';
+            document.getElementById('back-zeit-anzeige').textContent = backZeit + " bei 220°C ohne Dampf";
+            
             document.getElementById('roggen-zeile').style.display = roggenMehl > 0 ? 'flex' : 'none';
             document.getElementById('dinkel-zeile').style.display = dinkelMehl > 0 ? 'flex' : 'none';
             document.getElementById('weizen-zeile').style.display = weizenMehl > 0 ? 'flex' : 'none';
@@ -901,10 +854,11 @@
             document.getElementById('geschmack-beschreibung').textContent = eigenschaften.geschmack;
             document.getElementById('haltbarkeit-beschreibung').textContent = eigenschaften.haltbarkeit;
             
-            
+            let tempHinweise = temp < 20 ? "❄️ Kühl - längere Reifezeit" : temp > 28 ? "🔥 Warm - Vorsicht vor Überreife!" : "🌡️ Optimal";
             document.getElementById('temp-hinweise').innerHTML = `<p style="font-size: 0.8rem; color: #4a5568; margin-top: 10px;">${tempHinweise}</p>`;
             
-            
+            let autolyseZeit = anteile.roggen >= 80 ? "— (entfällt bei Roggen)" : anteile.weizen >= 30 ? "60-90 Min" : "45-60 Min";
+            document.getElementById('autolyse-zeit').textContent = autolyseZeit;
         }
 
         function speichereRezept() {
