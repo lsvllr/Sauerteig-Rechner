@@ -478,14 +478,17 @@
                 <h2>2. Hauptteig</h2>
                 <div class="recipe-content">
                     <div>
-                        <h4>Zutaten:</h4>
+                        <h4 id="autolyse-titel">Autolyse (Mehl + Wasser):</h4>
                         <ul class="zutat-liste">
-                            <li><span id="hauptteig-sauerteig">600</span>g aktiver Sauerteig</li>
                             <li id="roggen-zeile"><span id="hauptteig-roggen">252</span>g Roggen-Vollkornmehl</li>
                             <li id="dinkel-zeile"><span id="hauptteig-dinkel">72</span>g Dinkel-Vollkornmehl</li>
                             <li id="weizen-zeile"><span id="hauptteig-weizen">36</span>g Weizen-Vollkornmehl</li>
                             <li id="buchweizen-zeile" style="display: none;"><span id="hauptteig-buchweizen">0</span>g Buchweizenmehl</li>
                             <li><span id="hauptteig-wasser">200</span>ml warmes Wasser</li>
+                        </ul>
+                        <h4 id="nach-autolyse-titel" style="margin-top: 15px;">Nach Autolyse zugeben:</h4>
+                        <ul class="zutat-liste">
+                            <li><span id="hauptteig-sauerteig">600</span>g aktiver Sauerteig</li>
                             <li><span id="hauptteig-salz">14</span>g Salz</li>
                             <li><span id="hauptteig-kuemmel">1,5</span> TL Kümmel (optional)</li>
                         </ul>
@@ -558,6 +561,11 @@
                     <li>Nach dem Backen mindestens 2h auskühlen lassen</li>
                     <li>Je höher der Roggen-Anteil, desto kompakter das Brot</li>
                 </ul>
+            </div>
+
+            <div class="tipps">
+                <h3>📅 Ablauf (T = Sauerteig ansetzen)</h3>
+                <div class="zeitplan" id="ablauf-liste"></div>
             </div>
         </div>
     </div>
@@ -859,6 +867,41 @@
             
             let autolyseZeit = anteile.roggen >= 80 ? "— (entfällt bei Roggen)" : anteile.weizen >= 30 ? "60-90 Min" : "45-60 Min";
             document.getElementById('autolyse-zeit').textContent = autolyseZeit;
+
+            // Zutaten-Überschriften je nach Autolyse
+            const mitAutolyse = anteile.roggen < 80;
+            document.getElementById('autolyse-titel').textContent = mitAutolyse ? 'Autolyse (Mehl + Wasser):' : 'Zutaten (alles zusammen mischen):';
+            document.getElementById('nach-autolyse-titel').style.display = mitAutolyse ? 'block' : 'none';
+
+            // Ablauf berechnen (Mittelwerte der Spannen)
+            const spanne = t => { const m = t.match(/(\d+)-(\d+)\s*(h|Min)/); const f = m[3] === 'h' ? 60 : 1; return [m[1] * f, m[2] * f]; };
+            const mitte = r => Math.round((r[0] + r[1]) / 2);
+            const fmt = x => { const min = Math.round(x / 5) * 5; return 'T+' + Math.floor(min / 60) + ':' + String(min % 60).padStart(2, '0'); };
+            const st = spanne(zeitplan.sauerteigZeit);
+            const eg = spanne(ersteGareZeitplan.gareZeit);
+            const sg = [stueckgareMin, stueckgareMax];
+            const dampf = teigTeilen ? 10 : 15;
+            const bz = spanne(backZeit);
+            const tMischen = mitte(st);
+            const tFormen = tMischen + mitte(eg);
+            const tBacken = tFormen + mitte(sg);
+            const tOfen = Math.max(tFormen, tBacken - 35);
+            const tAus = tBacken + dampf + mitte(bz);
+            const schritte = [[0, 'Sauerteig ansetzen', zeitplan.sauerteigZeit]];
+            if (mitAutolyse) {
+                const al = spanne(autolyseZeit);
+                schritte.push([tMischen - mitte(al), 'Autolyse ansetzen (vor Sauerteig-Reife)', autolyseZeit]);
+            }
+            schritte.push(
+                [tMischen, mitAutolyse ? 'Sauerteig + Salz zugeben, erste Gare' : 'Hauptteig mischen, erste Gare', ersteGareZeitplan.gareZeit],
+                [tFormen, 'Formen, Stückgare', stueckgareText],
+                [tOfen, 'Ofen auf 250°C vorheizen', '30-40 Min'],
+                [tBacken, 'Backen', (bz[0] + dampf) + '-' + (bz[1] + dampf) + ' Min'],
+                [tAus, 'Auskühlen', 'min. 2h']
+            );
+            document.getElementById('ablauf-liste').innerHTML = schritte.map(s =>
+                `<div class="zeitplan-item"><span><strong>${fmt(s[0])}</strong> ${s[1]}</span><span class="zeit">${s[2]}</span></div>`
+            ).join('');
         }
 
         function speichereRezept() {
