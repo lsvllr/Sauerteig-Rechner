@@ -66,6 +66,7 @@
     --dinkel: #D9AA73;
     --weizen: #F0C94F;
     --buchweizen: #8E8E93;
+    --warm_wasser: #FF9494;
   }
 }
 *, *::before, *::after { box-sizing: inherit; }
@@ -742,7 +743,7 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
       </section>
 
       <section class="section">
-        <h2 class="section-header"><span class="step">1</span>Sauerteig <span class="meta">am Vorabend</span></h2>
+        <h2 class="section-header"><span class="step">1</span>Sauerteig </h2>
         <div class="group">
           <ul class="list">
             <li class="row"><span>Anstellgut</span><span class="value strong num"><span id="anstellgut-menge">120</span> g</span></li>
@@ -766,7 +767,7 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
             <li class="row" id="dinkel-zeile"><span class="row-label"><span class="dot" style="background:var(--dinkel)"></span>Dinkel-Vollkornmehl</span><span class="value strong num"><span id="hauptteig-dinkel">72</span> g</span></li>
             <li class="row" id="weizen-zeile"><span class="row-label"><span class="dot" style="background:var(--weizen)"></span>Weizen-Vollkornmehl</span><span class="value strong num"><span id="hauptteig-weizen">36</span> g</span></li>
             <li class="row" id="buchweizen-zeile" style="display: none;"><span class="row-label"><span class="dot" style="background:var(--buchweizen)"></span>Buchweizenmehl</span><span class="value strong num"><span id="hauptteig-buchweizen">0</span> g</span></li>
-            <li class="row"><span class="row-label"><span class="dot" style="background:transparent;border:1.5px solid var(--label-3)"></span>Warmes Wasser</span><span class="value strong num"><span id="hauptteig-wasser">200</span> ml</span></li>
+            <li class="row"><span class="row-label"><span class="dot" style="background:var(--warm_wasser)"></span>Warmes Wasser</span><span class="value strong num"><span id="hauptteig-wasser">200</span> ml</span></li>
           </ul>
         </div>
         <div class="subhead" id="nach-autolyse-titel">Nach Autolyse zugeben</div>
