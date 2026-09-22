@@ -66,7 +66,6 @@
     --dinkel: #D9AA73;
     --weizen: #F0C94F;
     --buchweizen: #8E8E93;
-    --warm_wasser: #FF9494;
   }
 }
 *, *::before, *::after { box-sizing: inherit; }
@@ -643,19 +642,19 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
           <div class="group">
             <div class="slider-row">
               <div class="top"><label for="custom-roggen" class="row-label"><span class="dot" style="background:var(--roggen)"></span>Roggen</label><span class="value"><span id="custom-roggen-wert">70</span> %</span></div>
-              <input type="range" id="custom-roggen" class="slider" min="0" max="100" value="70">
+              <input type="range" id="custom-roggen" class="slider" min="0" max="100" step="5" value="70">
             </div>
             <div class="slider-row">
               <div class="top"><label for="custom-dinkel" class="row-label"><span class="dot" style="background:var(--dinkel)"></span>Dinkel</label><span class="value"><span id="custom-dinkel-wert">20</span> %</span></div>
-              <input type="range" id="custom-dinkel" class="slider" min="0" max="100" value="20">
+              <input type="range" id="custom-dinkel" class="slider" min="0" max="100" step="5" value="20">
             </div>
             <div class="slider-row">
               <div class="top"><label for="custom-weizen" class="row-label"><span class="dot" style="background:var(--weizen)"></span>Weizen</label><span class="value"><span id="custom-weizen-wert">10</span> %</span></div>
-              <input type="range" id="custom-weizen" class="slider" min="0" max="100" value="10">
+              <input type="range" id="custom-weizen" class="slider" min="0" max="100" step="5" value="10">
             </div>
             <div class="slider-row">
               <div class="top"><label for="custom-buchweizen" class="row-label"><span class="dot" style="background:var(--buchweizen)"></span>Buchweizen</label><span class="value"><span id="custom-buchweizen-wert">0</span> %</span></div>
-              <input type="range" id="custom-buchweizen" class="slider" min="0" max="100" value="0">
+              <input type="range" id="custom-buchweizen" class="slider" min="0" max="100" step="5" value="0">
             </div>
             <div class="row sum-row">
               <span id="summe-anzeige" class="sum-ok">Summe: 100 %</span>
@@ -743,7 +742,7 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
       </section>
 
       <section class="section">
-        <h2 class="section-header"><span class="step">1</span>Sauerteig </h2>
+        <h2 class="section-header"><span class="step">1</span>Sauerteig</h2>
         <div class="group">
           <ul class="list">
             <li class="row"><span>Anstellgut</span><span class="value strong num"><span id="anstellgut-menge">120</span> g</span></li>
@@ -767,7 +766,7 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
             <li class="row" id="dinkel-zeile"><span class="row-label"><span class="dot" style="background:var(--dinkel)"></span>Dinkel-Vollkornmehl</span><span class="value strong num"><span id="hauptteig-dinkel">72</span> g</span></li>
             <li class="row" id="weizen-zeile"><span class="row-label"><span class="dot" style="background:var(--weizen)"></span>Weizen-Vollkornmehl</span><span class="value strong num"><span id="hauptteig-weizen">36</span> g</span></li>
             <li class="row" id="buchweizen-zeile" style="display: none;"><span class="row-label"><span class="dot" style="background:var(--buchweizen)"></span>Buchweizenmehl</span><span class="value strong num"><span id="hauptteig-buchweizen">0</span> g</span></li>
-            <li class="row"><span class="row-label"><span class="dot" style="background:var(--warm_wasser)"></span>Warmes Wasser</span><span class="value strong num"><span id="hauptteig-wasser">200</span> ml</span></li>
+            <li class="row"><span class="row-label"><span class="dot" style="background:#FF9494"></span>Warmes Wasser</span><span class="value strong num"><span id="hauptteig-wasser">200</span> ml</span></li>
           </ul>
         </div>
         <div class="subhead" id="nach-autolyse-titel">Nach Autolyse zugeben</div>
@@ -1034,13 +1033,13 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
                 return;
             }
             const norm = {
-                roggen: Math.round((werte.roggen / summe) * 100),
-                dinkel: Math.round((werte.dinkel / summe) * 100),
-                weizen: Math.round((werte.weizen / summe) * 100),
-                buchweizen: Math.round((werte.buchweizen / summe) * 100)
+                roggen: Math.round((werte.roggen / summe) * 20) * 5,
+                dinkel: Math.round((werte.dinkel / summe) * 20) * 5,
+                weizen: Math.round((werte.weizen / summe) * 20) * 5,
+                buchweizen: Math.round((werte.buchweizen / summe) * 20) * 5
             };
             const neueSumme = norm.roggen + norm.dinkel + norm.weizen + norm.buchweizen;
-            if (neueSumme !== 100) norm.roggen += (100 - neueSumme);
+            if (neueSumme !== 100) { const max = Object.keys(norm).reduce((a, b) => norm[a] >= norm[b] ? a : b); norm[max] += (100 - neueSumme); }
             el.customRoggen.value = norm.roggen;
             el.customRoggenWert.textContent = norm.roggen;
             el.customDinkel.value = norm.dinkel;
@@ -1360,13 +1359,13 @@ dialog.sheet::backdrop { background: rgba(0,0,0,0.4); }
             if (e.mehlMischung === 'custom') {
                 el.customControls.style.display = 'block';
                 el.customRoggen.value = e.customRoggen;
-                el.customRoggenWert.textContent = e.customRoggen;
+                el.customRoggenWert.textContent = el.customRoggen.value;
                 el.customDinkel.value = e.customDinkel;
-                el.customDinkelWert.textContent = e.customDinkel;
+                el.customDinkelWert.textContent = el.customDinkel.value;
                 el.customWeizen.value = e.customWeizen;
-                el.customWeizenWert.textContent = e.customWeizen;
+                el.customWeizenWert.textContent = el.customWeizen.value;
                 el.customBuchweizen.value = e.customBuchweizen;
-                el.customBuchweizenWert.textContent = e.customBuchweizen;
+                el.customBuchweizenWert.textContent = el.customBuchweizen.value;
                 aktualisiereCustomSumme();
             } else {
                 el.customControls.style.display = 'none';
