@@ -1,0 +1,3 @@
+/* Nur für die eigenständige App: Titel ohne Kopfzeile der Haushalt-App. */
+.sd-titel { margin: max(env(safe-area-inset-top, 0px), 12px) 0 2px; }
+.sd-untertitel { margin: 0 0 16px; }
