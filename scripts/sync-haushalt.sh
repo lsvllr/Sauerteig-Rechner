@@ -15,7 +15,11 @@ for f in daten.ts rechner.ts Oberflaeche.tsx symbole.tsx sauerteig.css; do
     cp "$Q/$f" "$Z/$f"
 done
 cp "$H/app/static/style.css" "$Z/haushalt.css"
-stand=$(git -C "$H" describe --always --dirty 2>/dev/null || echo unbekannt)
+stand=$(git -C "$H" rev-parse --short HEAD 2>/dev/null || echo unbekannt)
+# Nur die übernommenen Dateien zählen (andere offene Änderungen im Haushalt-Repo sind egal).
+if [ -n "$(git -C "$H" status --porcelain -- frontend/src/sauerteig app/static/style.css 2>/dev/null)" ]; then
+    stand="$stand mit lokalen Änderungen"
+fi
 zweig=$(git -C "$H" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unbekannt)
 printf 'Haushalt-App, Branch %s, Stand %s\n' "$zweig" "$stand" > "$Z/QUELLE"
 echo "Übernommen aus $H ($zweig, $stand)"
