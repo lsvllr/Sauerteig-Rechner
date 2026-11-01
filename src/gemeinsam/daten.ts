@@ -1,3 +1,5 @@
+/* Rechenkern des Sauerteig-Rechners. Quelle: Haushalt-App (frontend/src/sauerteig/daten.ts); die eigenständige
+ * App (github.com/lsvllr/Sauerteig-Rechner) übernimmt ihn mit scripts/sync-haushalt.sh. */
 export type Sorte = 'roggen' | 'dinkel' | 'weizen' | 'buchweizen';
 export type Anteile = Record<Sorte, number>;
 

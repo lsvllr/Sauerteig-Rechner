@@ -1,3 +1,5 @@
+/* Rechenkern des Sauerteig-Rechners. Quelle: Haushalt-App (frontend/src/sauerteig/rechner.ts); die eigenständige
+ * App (github.com/lsvllr/Sauerteig-Rechner) übernimmt ihn mit scripts/sync-haushalt.sh. */
 import type { Anteile } from './daten';
 
 export interface Zeitplan {
