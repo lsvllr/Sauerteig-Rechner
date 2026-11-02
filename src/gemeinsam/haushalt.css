@@ -1699,3 +1699,11 @@ html.vt .tabs { view-transition-name: tabbar; }
 .lt-bread { margin-left: auto; margin-right: -10px; }
 .dt-bread { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%; color: var(--accent); }
 .dt-bread:hover { background: var(--fill); }
+/* Öffnen über das Brot-Symbol: der Rechner wächst als Kreis aus dem Symbol (Mitte: --vt-x/--vt-y aus Layout.tsx),
+   die alte Seite tritt dahinter leicht zurück. */
+@keyframes vt-bread-in { from { clip-path: circle(0 at var(--vt-x, 100%) var(--vt-y, 0)); } to { clip-path: circle(150vmax at var(--vt-x, 100%) var(--vt-y, 0)); } }
+@keyframes vt-bread-out { to { transform: scale(.96); opacity: .6; } }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-vtdir="bread"]::view-transition-new(root) { animation: vt-bread-in .5s cubic-bezier(.4, 0, .2, 1) both; z-index: 2; }
+  :root[data-vtdir="bread"]::view-transition-old(root) { animation: vt-bread-out .5s cubic-bezier(.4, 0, .2, 1) both; z-index: 1; }
+}

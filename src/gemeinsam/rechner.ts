@@ -105,7 +105,7 @@ export function berechneBrotEigenschaften(anteile: Anteile): Rezept['eigenschaft
 }
 
 /** "8-10h" / "45-60 Min" → [min, max] in Minuten */
-function spanne(t: string): [number, number] {
+export function spanne(t: string): [number, number] {
     const m = t.match(/(\d+)-(\d+)\s*(h|Min)/);
     if (!m) throw new Error(`Keine Zeitspanne: ${t}`);
     const f = m[3] === 'h' ? 60 : 1;

@@ -4,8 +4,9 @@
  * (app/static/style.css) und sauerteig.css. */
 import type { CSSProperties, Dispatch, FormHTMLAttributes, ReactNode, SetStateAction } from 'react';
 import { SORTEN, mehlMischungen, tipps, type Anteile, type Sorte } from './daten';
-import { berechneOptimaleHydration, berechneRezept, hm, normalisiere } from './rechner';
+import { berechneOptimaleHydration, berechneRezept, hm, normalisiere, spanne } from './rechner';
 import { Symbol } from './symbole';
+import { TimerKarte, TimerStart, useMeldungen } from './TimerKarte';
 import './sauerteig.css';
 
 export interface Werte {
@@ -160,6 +161,7 @@ export function Rechner({
   speicherHinweis,
 }: RechnerProps) {
   const set = (patch: Partial<Werte>) => setW((alt) => ({ ...alt, ...patch }));
+  useMeldungen(melde);
 
   const anteile = anteileVon(w);
   const optimal = berechneOptimaleHydration(anteile);
@@ -208,6 +210,7 @@ export function Rechner({
 
   return (
     <>
+      <TimerKarte />
       <div className="card sd-summary">
         <div className="stats stats-4">
           <div className="stat">
@@ -513,6 +516,12 @@ export function Rechner({
             <p className="muted small" style={{ marginBottom: 0 }}>
               T = Zeitpunkt, an dem der Sauerteig angesetzt wird. Mittelwerte der Zeitspannen.
             </p>
+            <TimerStart
+              schritte={r.schritte}
+              reife={spanne(r.zeitplan.sauerteigZeit)}
+              oeffneBlatt={oeffneBlatt}
+              melde={melde}
+            />
           </div>
 
           <div className="card">

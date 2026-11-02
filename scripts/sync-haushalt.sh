@@ -11,8 +11,10 @@ Q="$H/frontend/src/sauerteig"
 Z=src/gemeinsam
 [ -d "$Q" ] || { echo "Haushalt-Repo nicht gefunden: $H" >&2; exit 1; }
 mkdir -p "$Z"
-for f in daten.ts rechner.ts Oberflaeche.tsx symbole.tsx sauerteig.css; do
-    cp "$Q/$f" "$Z/$f"
+# Alle Dateien des Rechners; in der Haushalt-App gelöschte verschwinden auch hier.
+find "$Z" -maxdepth 1 -type f ! -name haushalt.css ! -name QUELLE -delete
+for f in "$Q"/*; do
+    [ -f "$f" ] && cp "$f" "$Z/"
 done
 cp "$H/app/static/style.css" "$Z/haushalt.css"
 stand=$(git -C "$H" rev-parse --short HEAD 2>/dev/null || echo unbekannt)
