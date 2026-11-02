@@ -204,6 +204,8 @@ let fernPush: FernPush | null = null;
 /** Von der einbindenden App: Push vom Server (Haushalt-App, Sourdough.tsx). */
 export function setzeFernPush(f: FernPush | null): void {
   fernPush = f;
+  // App neu geöffnet, während gebacken wird: Zeitplan erneut melden (Server neu gestartet, Push-Abo erneuert).
+  if (lauf) fernPlanen(lauf);
 }
 
 /** Phase „backen“: Zeitplan an den Server; ``fern`` merken, wenn dieses Gerät von dort Push bekommt. */
