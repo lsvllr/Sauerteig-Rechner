@@ -2,11 +2,21 @@
  * (Sauerteig-Repo, kopiert per scripts/sync-haushalt.sh). Rechnet im Browser; wo Rezepte liegen und wie
  * gesichert und gelöscht wird, bestimmt die einbindende App (Props). Braucht das CSS der Haushalt-App
  * (app/static/style.css) und sauerteig.css. */
+import { useEffect, useState } from 'react';
 import type { CSSProperties, Dispatch, FormHTMLAttributes, ReactNode, SetStateAction } from 'react';
 import { SORTEN, mehlMischungen, tipps, type Anteile, type Sorte } from './daten';
-import { berechneOptimaleHydration, berechneRezept, hm, normalisiere, spanne } from './rechner';
+import {
+  berechneOptimaleHydration,
+  berechneRezept,
+  hm,
+  normalisiere,
+  spanne,
+  type Rezept as Berechnung,
+  type SchrittArt,
+} from './rechner';
 import { Symbol } from './symbole';
-import { TimerKarte, TimerStart, useMeldungen } from './TimerKarte';
+import { BEGINN, naechster, uhrzeit } from './timer';
+import { TimerKarte, TimerStart, useJetzt, useLauf, useMeldungen } from './TimerKarte';
 import './sauerteig.css';
 
 export interface Werte {
@@ -18,6 +28,7 @@ export interface Werte {
   mischung: string;
   custom: Anteile;
   teigTeilen: boolean;
+  ofenTemp: number;
 }
 
 const START_MISCHUNG = 'roggen-optimal';
@@ -30,6 +41,7 @@ export const START: Werte = {
   mischung: START_MISCHUNG,
   custom: { roggen: 70, dinkel: 20, weizen: 10, buchweizen: 0 },
   teigTeilen: false,
+  ofenTemp: 220,
 };
 
 const anteileVon = (w: Werte): Anteile =>
@@ -49,6 +61,7 @@ export function alsEinstellungen(w: Werte): Record<string, string | boolean> {
     customWeizen: String(w.custom.weizen),
     customBuchweizen: String(w.custom.buchweizen),
     teigTeilen: w.teigTeilen,
+    ofenTemp: String(w.ofenTemp),
   };
 }
 
@@ -75,6 +88,7 @@ function ausEinstellungen(e: Record<string, unknown>): Werte {
       buchweizen: n('customBuchweizen', START.custom.buchweizen),
     },
     teigTeilen: typeof e.teigTeilen === 'boolean' ? e.teigTeilen : false,
+    ofenTemp: n('ofenTemp', START.ofenTemp),
   };
 }
 
@@ -129,6 +143,250 @@ const MEHL_NAME: Record<Sorte, string> = {
   buchweizen: 'Buchweizenmehl',
 };
 
+function Mehle({ r, ohneRoggen, nurRoggen }: { r: Berechnung; ohneRoggen?: boolean; nurRoggen?: boolean }) {
+  return (
+    <>
+      {SORTEN.filter(([k]) => r.mehl[k] > 0 && (ohneRoggen ? k !== 'roggen' : nurRoggen ? k === 'roggen' : true)).map(
+        ([k]) => (
+          <Zeile key={k} label={MEHL_NAME[k]} dot={`var(--mehl-${k})`}>
+            {r.mehl[k]} g
+          </Zeile>
+        ),
+      )}
+    </>
+  );
+}
+
+function SauerteigSalz({ r }: { r: Berechnung }) {
+  return (
+    <>
+      <Zeile label="Aktiver Sauerteig">{r.sauerteigGesamt} g</Zeile>
+      <Zeile label="Salz">{r.salz} g</Zeile>
+      <Zeile
+        label={
+          <>
+            Kümmel <span className="muted">(optional)</span>
+          </>
+        }
+      >
+        {r.kuemmel.replace('.', ',')} TL
+      </Zeile>
+    </>
+  );
+}
+
+/** Zutaten und Anleitung eines Schritts im Ablauf. */
+function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; w: Werte }) {
+  switch (art) {
+    case 'ansetzen':
+      return (
+        <>
+          <ul className="sd-rows">
+            <Zeile label="Anstellgut">{r.anstellgut} g</Zeile>
+            <Zeile label="Roggen-Vollkornmehl" dot="var(--mehl-roggen)">
+              {r.sauerteigMehl} g
+            </Zeile>
+            <Zeile label="Wasser" dot="var(--mehl-wasser)">
+              {r.sauerteigWasser} ml
+            </Zeile>
+          </ul>
+          {r.tempHinweis && <div className="sd-note">{r.tempHinweis}</div>}
+          <ol className="sd-steps">
+            <li>Anstellgut, Mehl und Wasser gründlich verrühren.</li>
+            <li>
+              Abgedeckt bei {w.sauerteigTemp} °C <strong>{r.zeitplan.sauerteigZeit}</strong> reifen lassen.
+            </li>
+            <li>
+              Reif, wenn er Blasen wirft, leicht gewölbt ist und säuerlich riecht. Ergibt ca. {r.sauerteigGesamt} g.
+            </li>
+          </ol>
+        </>
+      );
+    case 'autolyse':
+      return (
+        <>
+          <ul className="sd-rows">
+            <Mehle r={r} ohneRoggen />
+            <Zeile label="Warmes Wasser" dot="var(--mehl-wasser)">
+              {r.hauptteigWasser} ml
+            </Zeile>
+          </ul>
+          <ol className="sd-steps">
+            <li>Mehl und warmes Wasser verrühren, bis kein trockenes Mehl mehr zu sehen ist.</li>
+            <li>
+              Abgedeckt <strong>{r.autolyseZeit}</strong> ruhen lassen.
+              {r.mehl.roggen > 0 && ' Das Roggenmehl kommt erst danach dazu.'}
+            </li>
+          </ol>
+        </>
+      );
+    case 'mischen':
+      return r.mitAutolyse ? (
+        <>
+          <div className="day-head">Zum Autolyseteig geben</div>
+          <ul className="sd-rows">
+            <Mehle r={r} nurRoggen />
+            <SauerteigSalz r={r} />
+          </ul>
+          <ol className="sd-steps">
+            <li>Alles zum Autolyseteig geben und gründlich verkneten, mit feuchten Händen.</li>
+            <li>
+              Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
+            </li>
+          </ol>
+        </>
+      ) : (
+        <>
+          <ul className="sd-rows">
+            <Mehle r={r} />
+            <Zeile label="Warmes Wasser" dot="var(--mehl-wasser)">
+              {r.hauptteigWasser} ml
+            </Zeile>
+            <SauerteigSalz r={r} />
+          </ul>
+          <ol className="sd-steps">
+            <li>Alles gründlich zu einem Teig mischen, mit feuchten Händen.</li>
+            <li>
+              Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
+            </li>
+          </ol>
+        </>
+      );
+    case 'formen':
+      return (
+        <ol className="sd-steps">
+          {w.teigTeilen && <li>Teig halbieren, je ca. {Math.round(r.einzelGewicht)} g.</li>}
+          <li>Mit feuchten Händen rundwirken, in einen bemehlten Gärkorb legen.</li>
+          <li>
+            Stückgare bei {w.gareTemp} °C: <strong>{r.stueckgare}</strong>. Fertig, wenn eine Delle nur zur Hälfte
+            zurückfedert.
+          </li>
+        </ol>
+      );
+    case 'ofen':
+      return (
+        <ol className="sd-steps">
+          <li>
+            Ofen auf <strong>{r.anbackTemp} °C</strong> vorheizen (30-40 Min), mittlere Schiene.
+          </li>
+          <li>Schüssel zum Abdecken oder ein Gefäß für Wasser (Schwaden) bereitstellen.</li>
+        </ol>
+      );
+    case 'backen':
+      return (
+        <ol className="sd-steps">
+          <li>Stürzen und kreuzförmig einschneiden.</li>
+          <li>
+            {r.dampfMin} Min bei {r.anbackTemp} °C <strong>mit Dampf</strong>{' '}
+            {w.teigTeilen ? '(2 Brote → engere Dampfphase)' : '(Schüssel über Brot oder Schwaden)'}.
+          </li>
+          <li>
+            {r.anbackTemp > r.ofenTemp ? `Auf ${r.ofenTemp} °C herunterschalten, ` : 'Dann '}
+            {r.backZeit} <strong>ohne Dampf</strong> backen.
+          </li>
+          <li>Klopftest: Fertiges Brot klingt hohl.</li>
+        </ol>
+      );
+    case 'auskuehlen':
+      return (
+        <ol className="sd-steps">
+          <li>Auf einem Gitter mindestens 2 Stunden auskühlen lassen, erst dann anschneiden.</li>
+        </ol>
+      );
+    default:
+      return null;
+  }
+}
+
+/** Alle Schritte mit Zutaten und Anleitung; immer nur einer ist offen. Läuft der Timer, öffnet sich der
+ * aktuelle Schritt von selbst und die Zeiten sind Uhrzeiten. */
+function Ablauf({
+  r,
+  w,
+  oeffneBlatt,
+  melde,
+}: {
+  r: Berechnung;
+  w: Werte;
+  oeffneBlatt: (id: string) => void;
+  melde: (text: string, art?: 'success' | 'error') => void;
+}) {
+  const lauf = useLauf();
+  // Timer nur zuordnen, wenn er zu den aktuellen Einstellungen passt (gleiche Schritte).
+  const passt =
+    !!lauf &&
+    lauf.schritte.length === r.schritte.length &&
+    lauf.schritte.every((s, i) => s.titel === r.schritte[i]![1]);
+  const l = passt ? lauf : null;
+  const jetzt = useJetzt(!!l);
+  let aktiv: number | null = null;
+  if (l) {
+    const n = naechster(l, jetzt);
+    aktiv = l.phase === 'reifen' ? 0 : n < 0 ? l.schritte.length - 1 : Math.max(0, n - 1);
+  }
+  const [offen, setOffen] = useState(aktiv ?? 0);
+  useEffect(() => {
+    if (aktiv !== null) setOffen(aktiv);
+  }, [aktiv]);
+
+  return (
+    <div className="card sd-ablauf">
+      <h2>Ablauf</h2>
+      <ol className="sd-acc">
+        {r.schritte.map(([t, was, dauer, art], i) => {
+          const s = l?.schritte[i];
+          const zeit = !s
+            ? `T+${hm(t)}`
+            : l!.phase === 'reifen' && i >= BEGINN
+              ? `ca. ${uhrzeit(s.at, jetzt)}`
+              : uhrzeit(s.at, jetzt);
+          const erledigt = l?.phase === 'backen' && aktiv !== null && i < aktiv;
+          return (
+            <li key={was} className={erledigt ? 'sd-done' : i === aktiv ? 'sd-now' : undefined}>
+              <button
+                type="button"
+                className="sd-acc-head"
+                aria-expanded={i === offen}
+                aria-controls={`sd-schritt-${i}`}
+                onClick={() => setOffen(i === offen ? -1 : i)}
+              >
+                <span className="sd-when">{zeit}</span>
+                <span className="sd-acc-title">
+                  <strong>
+                    {erledigt && <Symbol name="check" size={15} />} {was}
+                  </strong>
+                  <span className="muted small">{dauer}</span>
+                </span>
+                <Symbol name="chevron" size={18} />
+              </button>
+              <div className="sd-acc-body" id={`sd-schritt-${i}`} hidden={i !== offen}>
+                <Anleitung art={art} r={r} w={w} />
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {lauf && !passt ? (
+        <p className="muted small" style={{ marginBottom: 0 }}>
+          Der laufende Timer gehört zu anderen Einstellungen, daher hier ohne Uhrzeiten.
+        </p>
+      ) : (
+        !l && (
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            T = Zeitpunkt, an dem der Sauerteig angesetzt wird. Mittelwerte der Zeitspannen.
+          </p>
+        )
+      )}
+      <TimerStart
+        schritte={r.schritte}
+        reife={spanne(r.zeitplan.sauerteigZeit)}
+        oeffneBlatt={oeffneBlatt}
+        melde={melde}
+      />
+    </div>
+  );
+}
+
 export interface Rezept {
   id: number;
   name: string;
@@ -173,6 +431,7 @@ export function Rechner({
     hydration: w.hydration,
     anteile,
     teigTeilen: w.teigTeilen,
+    ofenTemp: w.ofenTemp,
   });
   const summe = SORTEN.reduce((a, [k]) => a + w.custom[k], 0);
   const mischung = w.mischung === 'custom' ? null : mehlMischungen[w.mischung];
@@ -230,7 +489,7 @@ export function Rechner({
           </div>
           <div className="stat">
             <span className="muted">Backen</span>
-            <strong>220 °C</strong>
+            <strong>{w.ofenTemp} °C</strong>
             <small>{r.backZeit} nach Dampf</small>
           </div>
         </div>
@@ -239,7 +498,7 @@ export function Rechner({
       <div className="grid-2 sd-layout">
         <div>
           <div className="card">
-            <h2>Mehl</h2>
+            <h2>Brotauswahl</h2>
             <label className="field" htmlFor="sd-mischung">
               Mischung
             </label>
@@ -306,6 +565,32 @@ export function Rechner({
                 </div>
               </div>
             )}
+            {rezepte.length > 0 && (
+              <div className="sd-no-print" id="rezepte">
+                <div className="day-head">Gespeicherte Rezepte</div>
+                <ul className="list">
+                  {rezepte.map((rez) => (
+                    <li className="list-item" key={rez.id}>
+                      <button type="button" className="sd-load" onClick={() => laden(rez)}>
+                        <strong>{rez.name}</strong>
+                        <span className="muted small">{rez.datum}</span>
+                      </button>
+                      <form {...loeschenForm(rez)} className="inline">
+                        <button className="link-btn" type="submit" aria-label={`„${rez.name}“ löschen`}>
+                          <Symbol name="trash" size={17} />
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="sd-no-print" style={{ margin: '12px 0 0' }}>
+              <button type="button" className="btn sd-save-btn" onClick={sichernOeffnen}>
+                <Symbol name="disk" size={18} />
+                Rezept sichern
+              </button>
+            </p>
           </div>
 
           <div className="card">
@@ -357,7 +642,7 @@ export function Rechner({
           </div>
 
           <div className="card">
-            <h2>Sauerteig &amp; Gare</h2>
+            <h2>Temperaturen</h2>
             <Regler
               id="sd-anstellgut"
               label="Anstellgut"
@@ -385,144 +670,24 @@ export function Rechner({
               max={32}
               onChange={(v) => set({ gareTemp: v })}
             />
+            <Regler
+              id="sd-ofen-temp"
+              label="Ofentemperatur"
+              wert={`${w.ofenTemp} °C`}
+              value={w.ofenTemp}
+              min={200}
+              max={250}
+              step={5}
+              onChange={(v) => set({ ofenTemp: v })}
+            />
+            <p className="muted small" style={{ marginBottom: 0 }}>
+              Backen ohne Dampf: {r.backZeit}. Vorheizen und Dampfphase bei {r.anbackTemp} °C.
+            </p>
           </div>
-
-          {rezepte.length > 0 && (
-            <div className="card sd-no-print" id="rezepte">
-              <h2>Rezepte</h2>
-              <ul className="list">
-                {rezepte.map((rez) => (
-                  <li className="list-item" key={rez.id}>
-                    <button type="button" className="sd-load" onClick={() => laden(rez)}>
-                      <strong>{rez.name}</strong>
-                      <span className="muted small">{rez.datum}</span>
-                    </button>
-                    <form {...loeschenForm(rez)} className="inline">
-                      <button className="link-btn" type="submit" aria-label={`„${rez.name}“ löschen`}>
-                        <Symbol name="trash" size={17} />
-                      </button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
         <div>
-          <div className="card">
-            <h2>Zeitplan</h2>
-            <ul className="sd-rows">
-              <Zeile label="Sauerteig-Reife">{r.zeitplan.sauerteigZeit}</Zeile>
-              <Zeile label="Erste Gare">{r.ersteGare}</Zeile>
-              <Zeile label="Stückgare">{r.stueckgare}</Zeile>
-            </ul>
-          </div>
-
-          <div className="card">
-            <h2>
-              <span className="sd-step">1</span>Sauerteig
-            </h2>
-            <ul className="sd-rows">
-              <Zeile label="Anstellgut">{r.anstellgut} g</Zeile>
-              <Zeile label="Roggen-Vollkornmehl">{r.sauerteigMehl} g</Zeile>
-              <Zeile label="Wasser">{r.sauerteigWasser} ml</Zeile>
-              <Zeile label={`Reifezeit bei ${w.sauerteigTemp} °C`}>
-                <span className="sd-tint">{r.zeitplan.sauerteigZeit}</span>
-              </Zeile>
-            </ul>
-            {r.tempHinweis && <div className="sd-note">{r.tempHinweis}</div>}
-            <p className="muted small" style={{ marginBottom: 0 }}>
-              Ergibt ca. {r.sauerteigGesamt} g aktiven Sauerteig. Benötigt: {r.sauerteigGesamt} g.
-            </p>
-          </div>
-
-          <div className="card">
-            <h2>
-              <span className="sd-step">2</span>Hauptteig
-            </h2>
-            <div className="day-head">
-              {r.mitAutolyse ? 'Autolyse (Mehl + Wasser)' : 'Zutaten (alles zusammen mischen)'}
-            </div>
-            <ul className="sd-rows">
-              {SORTEN.filter(([k]) => r.mehl[k] > 0).map(([k]) => (
-                <Zeile key={k} label={MEHL_NAME[k]} dot={`var(--mehl-${k})`}>
-                  {r.mehl[k]} g
-                </Zeile>
-              ))}
-              <Zeile label="Warmes Wasser" dot="var(--mehl-wasser)">
-                {r.hauptteigWasser} ml
-              </Zeile>
-            </ul>
-            {r.mitAutolyse && <div className="day-head">Nach Autolyse zugeben</div>}
-            <ul className="sd-rows">
-              <Zeile label="Aktiver Sauerteig">{r.sauerteigGesamt} g</Zeile>
-              <Zeile label="Salz">{r.salz} g</Zeile>
-              <Zeile
-                label={
-                  <>
-                    Kümmel <span className="muted">(optional)</span>
-                  </>
-                }
-              >
-                {r.kuemmel.replace('.', ',')} TL
-              </Zeile>
-              <Zeile label="Autolyse">
-                <span className="sd-tint">{r.autolyseZeit}</span>
-              </Zeile>
-              <Zeile label="Erste Gare">
-                <span className="sd-tint">{r.ersteGare}</span>
-              </Zeile>
-            </ul>
-          </div>
-
-          <div className="card">
-            <h2>
-              <span className="sd-step">3</span>Formen &amp; Backen
-            </h2>
-            <ul className="sd-rows">
-              <Zeile label="Stückgare im Gärkorb">
-                <span className="sd-tint">{r.stueckgare}</span>
-              </Zeile>
-              <Zeile label="Ofen vorheizen auf 250 °C">30-40 Min</Zeile>
-            </ul>
-            <ol className="sd-steps">
-              <li>Mit feuchten Händen rundwirken, in bemehlten Gärkorb legen.</li>
-              <li>Stürzen und kreuzförmig einschneiden.</li>
-              <li>
-                {r.dampfMin} Min bei 250 °C <strong>mit Dampf</strong>{' '}
-                {w.teigTeilen ? '(2 Brote → engere Dampfphase)' : '(Schüssel über Brot oder Schwaden)'}
-              </li>
-              <li>{r.backZeit} bei 220 °C ohne Dampf</li>
-            </ol>
-            <p className="muted small" style={{ marginBottom: 0 }}>
-              Mittlere Schiene verwenden.
-            </p>
-          </div>
-
-          <div className="card">
-            <h2>Ablauf</h2>
-            <ol className="sd-timeline">
-              {r.schritte.map(([t, was, dauer]) => (
-                <li key={was}>
-                  <span className="sd-when">T+{hm(t)}</span>
-                  <span>
-                    <strong>{was}</strong>
-                    <span className="muted small">{dauer}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-            <p className="muted small" style={{ marginBottom: 0 }}>
-              T = Zeitpunkt, an dem der Sauerteig angesetzt wird. Mittelwerte der Zeitspannen.
-            </p>
-            <TimerStart
-              schritte={r.schritte}
-              reife={spanne(r.zeitplan.sauerteigZeit)}
-              oeffneBlatt={oeffneBlatt}
-              melde={melde}
-            />
-          </div>
+          <Ablauf r={r} w={w} oeffneBlatt={oeffneBlatt} melde={melde} />
 
           <div className="card">
             <h2>Erwartetes Ergebnis</h2>
@@ -553,10 +718,6 @@ export function Rechner({
         </div>
       </div>
 
-      <div className="list-fab-space" aria-hidden="true" />
-      <button type="button" className="sd-fab sd-no-print" aria-label="Rezept sichern" onClick={sichernOeffnen}>
-        <Symbol name="disk" size={24} />
-      </button>
       <dialog className="sheet" id="sd-save-sheet" aria-labelledby="sd-save-t">
         <form {...sichernForm} className="sheet-body">
           <div className="sheet-bar">
@@ -584,7 +745,7 @@ export function Rechner({
             enterKeyHint="done"
           />
           <input type="hidden" name="settings" value={JSON.stringify(alsEinstellungen(w))} />
-          <p className="muted small">{speicherHinweis} Laden unter „Rezepte“.</p>
+          <p className="muted small">{speicherHinweis} Laden unter „Brotauswahl“.</p>
         </form>
       </dialog>
     </>

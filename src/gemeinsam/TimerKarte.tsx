@@ -1,8 +1,7 @@
 /* Back-Timer (timer.ts) in der Oberfläche: Karte oben im Rechner („Sauerteig reift“ / „Backen läuft“) und das
- * Blatt „Sauerteig angesetzt“. */
+ * Blatt „Sauerteig angesetzt“. Die Schritte mit Uhrzeiten zeigt der Ablauf (Oberflaeche.tsx). */
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { Schritt } from './rechner';
-import { Symbol } from './symbole';
 import {
   BEGINN,
   VORLAUF_WAHL,
@@ -25,7 +24,7 @@ export function useLauf() {
 }
 
 /** Aktuelle Zeit, jede Sekunde neu (nur solange ``aktiv``). */
-function useJetzt(aktiv: boolean): number {
+export function useJetzt(aktiv: boolean): number {
   const [jetzt, setJetzt] = useState(Date.now);
   useEffect(() => {
     if (!aktiv) return;
@@ -133,20 +132,8 @@ export function TimerKarte() {
         </button>
         <p className="muted small">
           Tippen, sobald der Sauerteig reif ist (Blasen, leicht gewölbt, säuerlicher Geruch). Ab dann laufen die
-          Schritte mit Erinnerungen.
+          Schritte mit Erinnerungen, Zutaten und Anleitung stehen im Ablauf.
         </p>
-        <div className="day-head">Voraussichtlicher Ablauf</div>
-        <ol className="sd-timeline sd-plan">
-          {lauf.schritte.slice(BEGINN).map((s, k) => (
-            <li key={k}>
-              <span className="sd-when">ca. {uhrzeit(s.at, jetzt)}</span>
-              <span>
-                <strong>{s.titel}</strong>
-                <span className="muted small">{s.dauer}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
         {vorlauf}
         <Mitteilungshinweis />
       </div>
@@ -173,19 +160,6 @@ export function TimerKarte() {
       ) : (
         <p className="muted">Brot mindestens 2 Stunden auskühlen lassen, erst dann anschneiden.</p>
       )}
-      <ol className="sd-timeline">
-        {lauf.schritte.map((s, k) => (
-          <li key={k} className={k === i ? 'sd-now' : s.at <= jetzt ? 'sd-done' : undefined}>
-            <span className="sd-when">{uhrzeit(s.at, jetzt)}</span>
-            <span>
-              <strong>
-                {s.at <= jetzt && <Symbol name="check" size={15} />} {s.titel}
-              </strong>
-              <span className="muted small">{s.dauer}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
       {!fertig && (
         <>
           {vorlauf}

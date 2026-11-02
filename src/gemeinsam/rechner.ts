@@ -15,10 +15,14 @@ export interface Eingabe {
     hydration: number;
     anteile: Anteile;
     teigTeilen: boolean;
+    /** Backtemperatur nach der Dampfphase (°C), Standard 220 */
+    ofenTemp?: number;
 }
 
-/** [Minuten ab T, Titel, Dauer-Text] */
-export type Schritt = [number, string, string];
+export type SchrittArt = 'ansetzen' | 'autolyse' | 'mischen' | 'formen' | 'ofen' | 'backen' | 'auskuehlen';
+
+/** [Minuten ab T, Titel, Dauer-Text, Art (für Zutaten und Anleitung im Ablauf)] */
+export type Schritt = [number, string, string, SchrittArt?];
 
 export interface Rezept {
     anstellgut: number;
@@ -38,6 +42,9 @@ export interface Rezept {
     stueckgare: string;
     backZeit: string;
     dampfMin: number;
+    ofenTemp: number;
+    /** Vorheizen und Dampfphase (°C) */
+    anbackTemp: number;
     autolyseZeit: string;
     mitAutolyse: boolean;
     tempHinweis: string;
@@ -151,7 +158,12 @@ export function berechneRezept(e: Eingabe): Rezept {
     const ersteGare = berechneZeitplan(22).gareZeit;
 
     const einzelGewicht = teigTeilen ? teiggewicht / 2 : teiggewicht;
-    const backZeit = einzelGewicht <= 900 ? "22-26 Min" : einzelGewicht <= 1500 ? "28-32 Min" : "33-38 Min";
+    // Backzeit bei 220 °C nach Gewicht; je 10 °C heißer rund 7 % kürzer, kühler entsprechend länger.
+    const ofenTemp = e.ofenTemp ?? 220;
+    const anbackTemp = Math.min(250, ofenTemp + 30);
+    const basis: [number, number] = einzelGewicht <= 900 ? [22, 26] : einzelGewicht <= 1500 ? [28, 32] : [33, 38];
+    const faktor = 1 + (220 - ofenTemp) * 0.007;
+    const backZeit = Math.round(basis[0] * faktor) + "-" + Math.round(basis[1] * faktor) + " Min";
     const dampfMin = teigTeilen ? 10 : 15;
 
     // Stückgare dynamisch nach Roggenanteil & Temperatur
@@ -173,23 +185,25 @@ export function berechneRezept(e: Eingabe): Rezept {
     const tBacken = tFormen + mitte([stueckgareMin, stueckgareMax]);
     const tOfen = Math.max(tFormen, tBacken - 35);
     const tAus = tBacken + dampfMin + mitte(bz);
-    const schritte: Schritt[] = [[0, 'Sauerteig ansetzen', zeitplan.sauerteigZeit]];
+    const schritte: Schritt[] = [[0, 'Sauerteig ansetzen', zeitplan.sauerteigZeit, 'ansetzen']];
     if (mitAutolyse) {
-        schritte.push([tMischen - mitte(spanne(autolyseZeit)), 'Autolyse ansetzen (vor Sauerteig-Reife)', autolyseZeit]);
+        schritte.push([tMischen - mitte(spanne(autolyseZeit)), 'Autolyse ansetzen (vor Sauerteig-Reife)', autolyseZeit, 'autolyse']);
     }
+    // Roggen kommt erst nach der Autolyse dazu (bringt dort nichts).
+    const zugeben = (mehl.roggen > 0 ? 'Roggenmehl, ' : '') + 'Sauerteig + Salz zugeben, erste Gare';
     schritte.push(
-        [tMischen, mitAutolyse ? 'Sauerteig + Salz zugeben, erste Gare' : 'Hauptteig mischen, erste Gare', ersteGare],
-        [tFormen, 'Formen, Stückgare', stueckgare],
-        [tOfen, 'Ofen auf 250°C vorheizen', '30-40 Min'],
-        [tBacken, 'Backen', (bz[0] + dampfMin) + '-' + (bz[1] + dampfMin) + ' Min'],
-        [tAus, 'Auskühlen', 'min. 2h']
+        [tMischen, mitAutolyse ? zugeben : 'Hauptteig mischen, erste Gare', ersteGare, 'mischen'],
+        [tFormen, 'Formen, Stückgare', stueckgare, 'formen'],
+        [tOfen, `Ofen auf ${anbackTemp} °C vorheizen`, '30-40 Min', 'ofen'],
+        [tBacken, 'Backen', (bz[0] + dampfMin) + '-' + (bz[1] + dampfMin) + ' Min', 'backen'],
+        [tAus, 'Auskühlen', 'min. 2h', 'auskuehlen']
     );
 
     return {
         anstellgut, sauerteigMehl, sauerteigWasser, sauerteigGesamt,
         gesamtMehl, mehl, hauptteigWasser, salz, kuemmel,
         teiggewicht, einzelGewicht, hydration,
-        zeitplan, ersteGare, stueckgare, backZeit, dampfMin,
+        zeitplan, ersteGare, stueckgare, backZeit, dampfMin, ofenTemp, anbackTemp,
         autolyseZeit, mitAutolyse, tempHinweis,
         eigenschaften: berechneBrotEigenschaften(anteile),
         schritte, gesamtDauer: tAus

@@ -90,19 +90,6 @@
 .sd-custom {
   margin-top: 12px;
 }
-.sd-step {
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  margin-right: 8px;
-  border-radius: 50%;
-  background: var(--tint);
-  color: var(--accent);
-  font-size: 0.8125rem;
-  font-weight: 800;
-  vertical-align: 2px;
-}
 .sd-rows {
   list-style: none;
   margin: 0 0 12px;
@@ -151,23 +138,6 @@
   gap: 6px;
   font-size: 0.9375rem;
 }
-.sd-timeline {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-}
-.sd-timeline li {
-  display: flex;
-  gap: 14px;
-  padding: 8px 0;
-}
-.sd-timeline li + li {
-  border-top: 1px solid var(--line);
-}
-.sd-timeline li > span:last-child {
-  display: grid;
-  gap: 1px;
-}
 .sd-when {
   flex: none;
   min-width: 58px;
@@ -193,33 +163,63 @@
   margin-top: 2px;
   color: var(--pos);
 }
-/* Sichern: runder Knopf unten rechts über der Tab-Leiste, öffnet das Blatt mit dem Namen */
-.sd-fab {
-  position: fixed;
-  z-index: 25;
-  display: inline-grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
+/* Sichern in der Brotauswahl, öffnet das Blatt mit dem Namen */
+.sd-save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Ablauf: ein Schritt offen, Kopf als Knopf */
+.sd-acc {
+  list-style: none;
+  margin: 0 0 12px;
   padding: 0;
-  right: calc(env(safe-area-inset-right, 0px) + 16px);
-  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px);
+}
+.sd-acc > li + li {
+  border-top: 1px solid var(--line);
+}
+.sd-acc-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  background: none;
   border: 0;
-  border-radius: 50%;
-  background: var(--brand);
-  color: var(--brand-text);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
-  transition: transform 0.08s;
 }
-.sd-fab:active {
-  transform: scale(0.94);
-  opacity: 0.85;
+.sd-acc-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
 }
-@media (hover: hover) {
-  .sd-fab:hover {
-    background: var(--brand-dark);
-  }
+.sd-acc-head > .sf:last-child {
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.sd-acc-head[aria-expanded='true'] > .sf:last-child {
+  transform: rotate(180deg);
+}
+.sd-acc-body {
+  padding: 0 0 4px;
+}
+.sd-acc-body > :last-child {
+  margin-bottom: 8px;
+}
+.sd-acc li.sd-done .sd-acc-head {
+  opacity: 0.5;
+}
+.sd-acc li.sd-done .sd-acc-title .sf {
+  color: var(--pos);
+  vertical-align: -2px;
+}
+.sd-acc li.sd-now .sd-acc-title strong {
+  color: var(--accent);
 }
 .sd-sheet-ok {
   justify-self: end;
@@ -250,6 +250,12 @@
     box-shadow: none;
     break-inside: avoid;
   }
+  .sd-acc-body[hidden] {
+    display: block !important;
+  }
+  .sd-acc-head > .sf:last-child {
+    display: none;
+  }
 }
 /* Back-Timer (TimerKarte.tsx) */
 .sd-timer-head {
@@ -276,24 +282,11 @@
   color: var(--accent);
   line-height: 1.15;
 }
-.sd-timeline li.sd-done {
-  opacity: 0.5;
-}
-.sd-timeline li.sd-done .sf {
-  color: var(--pos);
-  vertical-align: -2px;
-}
-.sd-timeline li.sd-now strong {
-  color: var(--accent);
-}
 .sd-timer .sd-note {
   margin: 12px 0 0;
 }
 .sd-timer-go {
   width: 100%;
-}
-.sd-plan li {
-  opacity: 0.6;
 }
 .sd-timer-fern {
   margin: 8px 0 0;
