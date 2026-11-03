@@ -140,10 +140,16 @@
 }
 .sd-when {
   flex: none;
-  min-width: 58px;
+  display: grid;
+  min-width: 76px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--accent);
+}
+.sd-bis {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--muted);
 }
 .sd-tips {
   list-style: none;

@@ -298,6 +298,17 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
   }
 }
 
+/** Dauer-Text („45-60 Min“, „8-10h“, „min. 2h“) → Minuten (Mitte der Spanne, auf 5 gerundet). */
+function dauerMinuten(d: string): number {
+  try {
+    const [a, b] = spanne(d);
+    return Math.round((a + b) / 10) * 5;
+  } catch {
+    const m = d.match(/(\d+)\s*h/);
+    return m ? Number(m[1]) * 60 : 0;
+  }
+}
+
 /** Alle Schritte mit Zutaten und Anleitung; immer nur einer ist offen. Läuft der Timer, öffnet sich der
  * aktuelle Schritt von selbst und die Zeiten sind Uhrzeiten. */
 function Ablauf({
@@ -335,11 +346,18 @@ function Ablauf({
       <ol className="sd-acc">
         {r.schritte.map(([t, was, dauer, art], i) => {
           const s = l?.schritte[i];
-          const zeit = !s
-            ? `T+${hm(t)}`
-            : l!.phase === 'reifen' && i >= BEGINN
-              ? `ca. ${uhrzeit(s.at, jetzt)}`
-              : uhrzeit(s.at, jetzt);
+          // Nach „Sauerteig angesetzt“: Uhrzeit von–bis; vor „Backen beginnen“ geschätzt.
+          const zeit = !s ? (
+            `T+${hm(t)}`
+          ) : (
+            <>
+              <span>
+                {l!.phase === 'reifen' && i >= BEGINN && 'ca. '}
+                {uhrzeit(s.at, jetzt)}
+              </span>
+              <span className="sd-bis">bis {uhrzeit(s.at + dauerMinuten(dauer) * 60_000, jetzt)}</span>
+            </>
+          );
           const erledigt = l?.phase === 'backen' && aktiv !== null && i < aktiv;
           return (
             <li key={was} className={erledigt ? 'sd-done' : i === aktiv ? 'sd-now' : undefined}>
@@ -361,6 +379,14 @@ function Ablauf({
               </button>
               <div className="sd-acc-body" id={`sd-schritt-${i}`} hidden={i !== offen}>
                 <Anleitung art={art} r={r} w={w} />
+                {art === 'ansetzen' && (
+                  <TimerStart
+                    schritte={r.schritte}
+                    reife={spanne(r.zeitplan.sauerteigZeit)}
+                    oeffneBlatt={oeffneBlatt}
+                    melde={melde}
+                  />
+                )}
               </div>
             </li>
           );
@@ -377,12 +403,6 @@ function Ablauf({
           </p>
         )
       )}
-      <TimerStart
-        schritte={r.schritte}
-        reife={spanne(r.zeitplan.sauerteigZeit)}
-        oeffneBlatt={oeffneBlatt}
-        melde={melde}
-      />
     </div>
   );
 }
