@@ -15,7 +15,7 @@ import {
   type SchrittArt,
 } from './rechner';
 import { Symbol } from './symbole';
-import { BEGINN, naechster, uhrzeit } from './timer';
+import { BEGINN, hakeAb, offenAb, uhrzeit } from './timer';
 import { TimerKarte, TimerStart, useJetzt, useLauf, useMeldungen } from './TimerKarte';
 import './sauerteig.css';
 
@@ -309,8 +309,8 @@ function dauerMinuten(d: string): number {
   }
 }
 
-/** Alle Schritte mit Zutaten und Anleitung; immer nur einer ist offen. Läuft der Timer, öffnet sich der
- * aktuelle Schritt von selbst und die Zeiten sind Uhrzeiten. */
+/** Alle Schritte mit Zutaten und Anleitung; immer nur einer ist offen. Läuft der Timer, sind die Zeiten
+ * Uhrzeiten, der nächste offene Schritt klappt von selbst auf und lässt sich abhaken. */
 function Ablauf({
   r,
   w,
@@ -330,11 +330,8 @@ function Ablauf({
     lauf.schritte.every((s, i) => s.titel === r.schritte[i]![1]);
   const l = passt ? lauf : null;
   const jetzt = useJetzt(!!l);
-  let aktiv: number | null = null;
-  if (l) {
-    const n = naechster(l, jetzt);
-    aktiv = l.phase === 'reifen' ? 0 : n < 0 ? l.schritte.length - 1 : Math.max(0, n - 1);
-  }
+  const weiter = l ? offenAb(l) : 0;
+  const aktiv = l && weiter < l.schritte.length ? weiter : null;
   const [offen, setOffen] = useState(aktiv ?? 0);
   useEffect(() => {
     if (aktiv !== null) setOffen(aktiv);
@@ -358,7 +355,7 @@ function Ablauf({
               <span className="sd-bis">bis {uhrzeit(s.at + dauerMinuten(dauer) * 60_000, jetzt)}</span>
             </>
           );
-          const erledigt = l?.phase === 'backen' && aktiv !== null && i < aktiv;
+          const erledigt = !!l && i < weiter;
           return (
             <li key={was} className={erledigt ? 'sd-done' : i === aktiv ? 'sd-now' : undefined}>
               <button
@@ -379,6 +376,27 @@ function Ablauf({
               </button>
               <div className="sd-acc-body" id={`sd-schritt-${i}`} hidden={i !== offen}>
                 <Anleitung art={art} r={r} w={w} />
+                {l && i >= BEGINN && i <= weiter && (
+                  <div className="sd-no-print sd-abhaken">
+                    <button
+                      type="button"
+                      className={erledigt ? 'btn' : 'btn accent-fill'}
+                      onClick={() => {
+                        hakeAb(i);
+                        setOffen(i + 1);
+                      }}
+                    >
+                      <Symbol name="check" size={18} />
+                      {erledigt ? 'Aktualisieren' : 'Erledigt'}
+                    </button>
+                    {erledigt && (
+                      <span className="muted small">
+                        Erledigt um {uhrzeit(l.schritte[i]!.at, jetzt)}. Aktualisieren setzt ihn auf jetzt, die
+                        folgenden Schritte rücken mit.
+                      </span>
+                    )}
+                  </div>
+                )}
                 {art === 'ansetzen' && (
                   <TimerStart
                     schritte={r.schritte}

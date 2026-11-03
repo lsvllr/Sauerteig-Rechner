@@ -1,4 +1,6 @@
-/* Back-Timer des Sauerteig-Rechners. Zwei Phasen:
+/* Back-Timer des Sauerteig-Rechners. Schritte werden der Reihe nach abgehakt (Ansetzen mit dem Start, „Backen
+ * beginnen“ hakt den ersten Backschritt ab); ein Haken setzt den Schritt auf jetzt und verschiebt die späteren
+ * um denselben Betrag. Ein schon erledigter Schritt lässt sich so auf jetzt aktualisieren. Zwei Phasen:
  * - „reifen“ (nach „Sauerteig angesetzt“): nur im Browser; zeigt, wann der Sauerteig ungefähr reif ist und das
  *   Backen beginnt, und erinnert einmal daran.
  * - „backen“ (nach „Backen beginnen“): die restlichen Schritte ab jetzt neu gerechnet, je Schritt eine Meldung
@@ -30,6 +32,8 @@ export interface Lauf {
   gemeldet: string[];
   /** Phase „backen“: der Server meldet per Push auf dieses Gerät, der Browser zeigt keine eigenen Mitteilungen. */
   fern?: boolean;
+  /** Index des nächsten nicht abgehakten Schritts (fehlt bei älteren Ständen: siehe offenAb) */
+  weiter?: number;
 }
 
 /** Push vom Server ab „Backen beginnen“; ``plane`` antwortet, ob dieses Gerät die Meldungen bekommt. */
@@ -95,18 +99,32 @@ export function restzeit(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-/** Phase „backen“ ab jetzt: Schritte ab BEGINN so verschoben, dass BEGINN jetzt dran ist. */
-export function backenAb(l: Lauf, jetzt: number): Lauf {
-  const b = l.schritte[BEGINN];
-  const d = b ? jetzt - b.at : 0;
+/** Index des nächsten nicht abgehakten Schritts. */
+export function offenAb(l: Lauf): number {
+  return l.weiter ?? (l.phase === 'reifen' ? BEGINN : BEGINN + 1);
+}
+
+/** Schritt ``i`` jetzt erledigt: er bekommt die Uhrzeit jetzt, alle späteren verschieben sich um denselben Betrag
+ * (später erledigt → später, früher → früher) und gelten als offen. Danach Phase „backen“. */
+export function hakeAbAm(l: Lauf, i: number, jetzt: number): Lauf {
+  const s = l.schritte[i];
+  const d = s ? jetzt - s.at : 0;
+  const backen = l.phase === 'backen';
   return {
     ...l,
     phase: 'backen',
     erstellt: jetzt,
-    gemeldet: [],
-    fern: false,
-    schritte: l.schritte.map((s, i) => (i >= BEGINN ? { ...s, at: s.at + d } : s)),
+    weiter: i + 1,
+    // Meldungen der verschobenen Schritte neu
+    gemeldet: backen ? l.gemeldet.filter((k) => parseInt(k, 10) < i) : [],
+    fern: backen ? l.fern : false,
+    schritte: l.schritte.map((x, j) => (j >= i ? { ...x, at: x.at + d } : x)),
   };
+}
+
+/** Phase „backen“ ab jetzt: Schritte ab BEGINN so verschoben, dass BEGINN jetzt dran ist. */
+export function backenAb(l: Lauf, jetzt: number): Lauf {
+  return hakeAbAm(l, BEGINN, jetzt);
 }
 
 /** Was jetzt zu melden ist; trägt alles Fällige in ``gemeldet`` ein (auch zu spät Erkanntes, ohne Meldung). */
@@ -256,9 +274,14 @@ export function aendereVorlauf(vorlauf: number): void {
 }
 
 export function beginneBacken(): void {
-  if (!lauf) return;
+  if (lauf?.phase === 'reifen') hakeAb(BEGINN);
+}
+
+/** Abhaken: der nächste offene Schritt, oder ein erledigter neu auf jetzt (nicht das Ansetzen, das ist der Start). */
+export function hakeAb(i: number): void {
+  if (!lauf || i < BEGINN || i > offenAb(lauf)) return;
   const jetzt = Date.now();
-  const l = backenAb(lauf, jetzt);
+  const l = hakeAbAm(lauf, i, jetzt);
   faellig(l, jetzt);
   setze(l);
   fernPlanen(l);

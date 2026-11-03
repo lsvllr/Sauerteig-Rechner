@@ -211,6 +211,18 @@
 .sd-acc-head[aria-expanded='true'] > .sf:last-child {
   transform: rotate(180deg);
 }
+.sd-abhaken {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 12px 0 0;
+}
+.sd-abhaken .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .sd-acc-body {
   padding: 0 0 4px;
 }
