@@ -1708,3 +1708,31 @@ html.vt .tabs { view-transition-name: tabbar; }
   :root[data-vtdir="bread"]::view-transition-new(root) { animation: vt-bread-in .5s cubic-bezier(.4, 0, .2, 1) both; z-index: 2; }
   :root[data-vtdir="bread"]::view-transition-old(root) { animation: vt-bread-out .5s cubic-bezier(.4, 0, .2, 1) both; z-index: 1; }
 }
+
+/* ---------- Tab-Wechsel: Kopfzeile der Hauptseiten bleibt stehen ----------
+   Profil, Brot und Flasche stehen still, nur der Inhalt darunter schiebt seitlich (siehe oben).
+   Der große Titel wechselt wie ein Zählwerk: Tab rechts davon – alter Titel rollt nach oben raus, neuer kommt
+   von unten; Tab links davon – umgekehrt. nav.ts setzt data-vtdir schon vor dem Schnappschuss der alten Seite. */
+html.vt[data-vtdir="fwd"] .lt-row .large-title, html.vt[data-vtdir="back"] .lt-row .large-title { view-transition-name: lt-title; }
+html.vt[data-vtdir="fwd"] .lt-profile, html.vt[data-vtdir="back"] .lt-profile { view-transition-name: lt-profile; }
+html.vt[data-vtdir="fwd"] .lt-bread:not(.lt-drinks), html.vt[data-vtdir="back"] .lt-bread:not(.lt-drinks) { view-transition-name: lt-bread; }
+html.vt[data-vtdir="fwd"] .lt-drinks, html.vt[data-vtdir="back"] .lt-drinks { view-transition-name: lt-drinks; }
+::view-transition-group(lt-profile), ::view-transition-group(lt-bread), ::view-transition-group(lt-drinks) { animation: none; }
+::view-transition-old(lt-profile), ::view-transition-old(lt-bread), ::view-transition-old(lt-drinks) { display: none; }
+::view-transition-new(lt-profile), ::view-transition-new(lt-bread), ::view-transition-new(lt-drinks) { animation: none; }
+::view-transition-group(lt-title) { animation: none; }
+/* clip-path läuft gegen die Verschiebung: sichtbar bleibt nur, was im Kasten des Titels steht (Slot). */
+@keyframes vt-slot-out-up { from { transform: none; clip-path: inset(0); } to { transform: translateY(-100%); clip-path: inset(100% 0 0 0); } }
+@keyframes vt-slot-in-up { from { transform: translateY(100%); clip-path: inset(0 0 100% 0); } to { transform: none; clip-path: inset(0); } }
+@keyframes vt-slot-out-down { from { transform: none; clip-path: inset(0); } to { transform: translateY(100%); clip-path: inset(0 0 100% 0); } }
+@keyframes vt-slot-in-down { from { transform: translateY(-100%); clip-path: inset(100% 0 0 0); } to { transform: none; clip-path: inset(0); } }
+::view-transition-old(lt-title), ::view-transition-new(lt-title) {
+  mix-blend-mode: normal; animation-duration: var(--t-slide); animation-timing-function: var(--ease-move); animation-fill-mode: both;
+}
+:root[data-vtdir="fwd"]::view-transition-old(lt-title) { animation-name: vt-slot-out-up; }
+:root[data-vtdir="fwd"]::view-transition-new(lt-title) { animation-name: vt-slot-in-up; }
+:root[data-vtdir="back"]::view-transition-old(lt-title) { animation-name: vt-slot-out-down; }
+:root[data-vtdir="back"]::view-transition-new(lt-title) { animation-name: vt-slot-in-down; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(lt-title) { display: none; }
+}
