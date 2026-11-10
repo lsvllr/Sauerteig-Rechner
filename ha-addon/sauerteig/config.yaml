@@ -1,0 +1,27 @@
+# Version setzt die GitHub Action bei jedem Build auf das Tag des Images (sha-<7 Zeichen>).
+name: Sauerteig-Rechner
+description: Vollkornbrot aus Roggen, Dinkel, Weizen und Buchweizen
+version: "0.0.0"
+slug: sauerteig
+url: https://github.com/lsvllr/sauerteig-addon
+arch:
+  - aarch64
+  - amd64
+image: ghcr.io/lsvllr/sauerteig-rechner
+init: false
+startup: application
+boot: auto
+# HA startet das Add-on neu, wenn /healthz nicht mehr antwortet.
+watchdog: http://[HOST]:[PORT:8080]/healthz
+# Laufende Back-Timer liegen nur im Speicher (die App meldet sie nach einem Neustart erneut).
+# In /data liegen nur die erzeugten VAPID-Schlüssel (vapid.json), wenn keine eingetragen sind.
+# Kein Port nach außen: erreichbar im HA-Netz unter <Hostname>:8080 (Hostname auf der Info-Seite),
+# öffentlich über das Cloudflared-Add-on.
+options:
+  app_url: "https://sauerteig.vollrath.app"
+  vapid_public_key: ""
+  vapid_private_key: ""
+schema:
+  app_url: url
+  vapid_public_key: str?
+  vapid_private_key: password?

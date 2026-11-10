@@ -1,0 +1,5 @@
+# Wird von der GitHub Action (.github/workflows/image.yml im Sauerteig-Rechner-Repo) nach lsvllr/sauerteig-addon kopiert.
+# Hier ändern, nicht im Add-on-Repo.
+name: Sauerteig-Rechner
+url: https://github.com/lsvllr/sauerteig-addon
+maintainer: Elias

@@ -5,3 +5,7 @@ fly.toml
 Dockerfile
 *.md
 sauerteig_*.html
+ha-addon
+.github
+scripts
+docs
