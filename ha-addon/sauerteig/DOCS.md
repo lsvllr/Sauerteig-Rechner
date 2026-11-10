@@ -1,18 +1,29 @@
 # Sauerteig-Rechner
 
-Node-Server: liefert die App aus und schickt die Erinnerungen des Back-Timers per Web-Push. Rezepte liegen im
-Browser der Geräte, laufende Back-Timer nur im Speicher des Servers (die App meldet sie nach einem Neustart beim
-nächsten Öffnen erneut).
+Node-Server: liefert die App aus, verwaltet Konten und Rezepte und schickt die Erinnerungen des Back-Timers per
+Web-Push an alle Geräte eines Kontos.
+
+## Konten
+
+Ein Konto entsteht nur mit einem Einladungscode. Codes erzeugst du unter `https://sauerteig.vollrath.app/admin`
+(Passwort = **admin_password**). Jeder Code gilt 14 Tage und ergibt genau ein Konto, den Namen wählt die
+eingeladene Person selbst. Es gibt kein Passwort: Ein Gerät bleibt angemeldet. Weitere Geräte meldet man mit einem
+Gerätecode an (15 Minuten gültig). Den erzeugt die App unter „Konto → Weiteres Gerät anmelden“, im Notfall auch
+der Admin für ein Konto.
 
 ## Einstellungen
 
-- **app_url**: öffentliche Adresse, z. B. `https://sauerteig.vollrath.app` (ohne `/` am Ende). Steht als Kontakt
-  in den Push-Nachrichten.
-- **vapid_public_key** / **vapid_private_key**: Schlüssel für Web-Push. Leer lassen: das Add-on erzeugt beim
-  ersten Start ein Paar und behält es in `/data/vapid.json` (in den HA-Backups enthalten). Nur eintragen, wenn
-  bestehende Push-Abos weiter gelten sollen (gleiche Adresse wie vorher).
+- **app_url**: öffentliche Adresse, z. B. `https://sauerteig.vollrath.app` (ohne `/` am Ende).
+- **admin_password**: Passwort für `/admin`. Leer heißt: Der Admin-Bereich ist gesperrt.
+- **vapid_public_key** / **vapid_private_key**: Schlüssel für Web-Push. Leer lassen: Das Add-on erzeugt beim
+  ersten Start ein Paar und speichert es in `/data/vapid.json`.
 
 Nach dem Ändern speichern und das Add-on neu starten.
+
+## Daten
+
+`/data/sauerteig.db` (SQLite: Konten, Rezepte, Push-Abos, laufende Back-Timer) und `/data/vapid.json`. Beide
+sind in den HA-Backups enthalten. Während eines Backups stoppt das Add-on kurz.
 
 ## Erreichbarkeit
 

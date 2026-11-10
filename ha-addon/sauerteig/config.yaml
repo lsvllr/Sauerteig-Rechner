@@ -13,15 +13,19 @@ startup: application
 boot: auto
 # HA startet das Add-on neu, wenn /healthz nicht mehr antwortet.
 watchdog: http://[HOST]:[PORT:8080]/healthz
-# Laufende Back-Timer liegen nur im Speicher (die App meldet sie nach einem Neustart erneut).
-# In /data liegen nur die erzeugten VAPID-Schlüssel (vapid.json), wenn keine eingetragen sind.
+# Daten in /data: sauerteig.db (Konten, Rezepte, Push-Abos, laufende Back-Timer) und ggf. vapid.json.
+# Während der HA-Sicherung kurz stoppen: SQLite wird dann sauber gesichert.
+backup: cold
+timeout: 20
 # Kein Port nach außen: erreichbar im HA-Netz unter <Hostname>:8080 (Hostname auf der Info-Seite),
 # öffentlich über das Cloudflared-Add-on.
 options:
   app_url: "https://sauerteig.vollrath.app"
+  admin_password: ""
   vapid_public_key: ""
   vapid_private_key: ""
 schema:
   app_url: url
+  admin_password: password?
   vapid_public_key: str?
   vapid_private_key: password?

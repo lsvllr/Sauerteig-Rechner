@@ -1,3 +1,14 @@
 /* Nur für die eigenständige App: Titel ohne Kopfzeile der Haushalt-App. */
 .sd-titel { margin: max(env(safe-area-inset-top, 0px), 12px) 0 2px; }
 .sd-untertitel { margin: 0 0 16px; }
+
+/* Anmeldung, Konto, Admin */
+.zg-fehler { margin: 0; color: var(--neg-fg); font-weight: 600; }
+.zg-wechsel { justify-self: center; padding: 0 12px; }
+.sd-offline { margin: 0 0 14px; padding: 10px 13px; border-radius: var(--radius-ctl); background: var(--warn-bg); color: var(--warn-fg); border: 1px solid var(--warn-line); }
+.sd-offline .link-btn { color: inherit; text-decoration: underline; min-height: 0; display: inline; }
+.sd-konto { margin: 0; }
+.ad-code { margin: 6px 0; font: 700 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-align: center; user-select: all; word-break: break-all; }
+.ad-neu { border-color: var(--accent); }
+.ad-fuss { margin: 14px 0 10px; }
+input[type=password].ad-pw { padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-ctl); font-size: max(16px, 1rem); background: var(--field); color: var(--ink); width: 100%; min-height: 46px; box-sizing: border-box; font-family: inherit; }

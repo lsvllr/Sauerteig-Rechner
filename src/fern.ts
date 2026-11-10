@@ -1,6 +1,8 @@
-// Push vom eigenen Server (server/server.ts) ab „Backen beginnen“: Push-Abo dieses Geräts anlegen und den Zeitplan
-// melden. Klappt das, zeigt der Browser keine eigenen Mitteilungen mehr (timer.ts, „fern“).
+// Push vom eigenen Server (server/server.ts) ab „Backen beginnen“: Push-Abo dieses Geräts beim Konto anmelden und
+// den Zeitplan melden. Der Server schickt die Meldungen an alle Geräte des Kontos; klappt das Melden, zeigt der
+// Browser keine eigenen Mitteilungen mehr (timer.ts, „fern“).
 import { setzeFernPush } from './gemeinsam/timer';
+import { post } from './api';
 
 const b64 = (s: string) => {
     const roh = atob((s + '='.repeat((4 - (s.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
@@ -26,27 +28,33 @@ async function abo(): Promise<PushSubscription | null> {
     return a ?? reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: schluessel });
 }
 
+/** Dieses Gerät beim Konto anmelden, damit es auch Back-Timer anderer Geräte des Kontos meldet. */
+export async function meldeGeraet(): Promise<void> {
+    try {
+        const a = await abo();
+        if (a) await post('/api/push-abo', { abo: a.toJSON() });
+    } catch {
+        /* ohne Push geht es auch */
+    }
+}
+
+/** Beim Abmelden: Endpoint dieses Geräts, damit der Server es vom Konto löst. */
+export async function vergissPush(): Promise<string | undefined> {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    const a = await reg?.pushManager?.getSubscription();
+    return a?.endpoint;
+}
+
 export function installiereFernPush(): void {
     setzeFernPush({
         async plane(lauf) {
             const a = await abo();
             if (!a) return false;
-            const r = await fetch('/api/timer', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ abo: a.toJSON(), lauf }),
-            });
+            const r = await post('/api/timer', { abo: a.toJSON(), lauf });
             return r.ok;
         },
         async stoppe() {
-            const reg = await navigator.serviceWorker?.getRegistration();
-            const a = await reg?.pushManager?.getSubscription();
-            if (a)
-                await fetch('/api/timer/stop', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ endpoint: a.endpoint }),
-                });
+            await post('/api/timer/stop');
         },
     });
 }
