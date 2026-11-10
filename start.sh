@@ -3,7 +3,7 @@
 #   - Einstellungen als ENV in Großbuchstaben (app_url → APP_URL, vapid_* → VAPID_*), leere Werte überspringen
 #   - VAPID-Schlüssel ohne Einstellung: einmal erzeugen und in /data/vapid.json behalten (in HA-Backups),
 #     damit die Push-Abos der Geräte einen Neustart überleben
-# Sonst (Fly, lokal) unverändert.
+# Sonst (lokal) unverändert.
 set -eu
 cd /app
 

@@ -3,8 +3,7 @@
 // mit dem Zeitplan an und bekommt nur selbst Nachrichten. Fällig wird nach denselben Regeln wie im Browser
 // (faellig() aus src/gemeinsam/timer.ts).
 //
-// Die Fly-Maschine stoppt im Leerlauf. Solange noch eine Meldung aussteht, ruft sich der Server deshalb jede Minute
-// selbst über die öffentliche Adresse auf; danach darf sie wieder schlafen. Die Zeitpläne liegen nur im Speicher:
+// Läuft als Home-Assistant-Add-on dauerhaft. Die Zeitpläne liegen nur im Speicher:
 // Nach einem Neustart meldet die App sie beim nächsten Öffnen erneut (setzeFernPush in timer.ts).
 import { createHash } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -15,9 +14,8 @@ import { BEGINN, VORLAUF_WAHL, faellig, type Lauf } from '../src/gemeinsam/timer
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DIST = process.env.DIST ?? join(process.cwd(), 'dist');
-const APP_URL = (process.env.APP_URL ?? 'https://sauerteig-rechner.fly.dev').replace(/\/$/, '');
+const APP_URL = (process.env.APP_URL ?? 'https://sauerteig.vollrath.app').replace(/\/$/, '');
 const TAKT = 10_000;
-const WACH_TAKT = 60_000;
 const MAX_TIMER = 500;
 const MAX_BODY = 16_000;
 
@@ -111,21 +109,8 @@ async function tick(): Promise<void> {
   }
 }
 
-let letztesWecken = 0;
-async function wachHalten(): Promise<void> {
-  if (!process.env.FLY_APP_NAME || timer.size === 0 || Date.now() - letztesWecken < WACH_TAKT) return;
-  letztesWecken = Date.now();
-  try {
-    await fetch(APP_URL + '/healthz', { signal: AbortSignal.timeout(10_000) });
-  } catch (err) {
-    console.warn('Wachhalten fehlgeschlagen:', err);
-  }
-}
-
 setInterval(() => {
-  tick()
-    .then(wachHalten)
-    .catch((err) => console.warn('Back-Timer:', err));
+  tick().catch((err) => console.warn('Back-Timer:', err));
 }, TAKT);
 
 /* ------------------------------------------------------------------- HTTP */

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Übernimmt den Sauerteig-Rechner aus der Haushalt-App: Rechenkern, Oberfläche (React), deren CSS und das
 # Basis-CSS der Haushalt-App (Karten, Regler, Schalter, Farben). Quelle ist immer die Haushalt-App; die Kopien
-# in src/gemeinsam/ werden mit eingecheckt, damit der Build (Docker/Fly) ohne das Haushalt-Repo auskommt.
+# in src/gemeinsam/ werden mit eingecheckt, damit der Build (Docker) ohne das Haushalt-Repo auskommt.
 #
 # Aufruf: scripts/sync-haushalt.sh [Pfad zum Haushalt-Repo]   (Standard: ../../Haushalt tracker)
 set -eu
