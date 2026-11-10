@@ -7,6 +7,9 @@ app = 'sauerteig-rechner'
 primary_region = 'fra'
 
 [build]
+  # Der Fly-Builder setzt TARGETARCH nicht selbst (Dockerfile wählt damit die HA-Labels).
+  [build.args]
+    TARGETARCH = 'amd64'
 [http_service]
   internal_port = 8080
   force_https = true
