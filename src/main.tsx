@@ -11,6 +11,7 @@ import { beendeLauf } from './gemeinsam/timer';
 import { leseKonto, merkeKonto, type Einstellungen, type KontoRezept, type KontoStand } from './speicher';
 import { Offline, post, rufe } from './api';
 import { installiereFernPush, meldeGeraet, vergissPush } from './fern';
+import { inHaushaltApp, installiereHaushaltApp } from './haushaltApp';
 import { installiereBlaetter, oeffneBlatt, schliesseBlatt, zeigeToast } from './ui';
 import { Zugang } from './zugang';
 import { Admin } from './admin';
@@ -39,7 +40,7 @@ function App() {
             const k = await holeKonto();
             setze(k);
             setOffline(false);
-            if (k && import.meta.env.PROD) void meldeGeraet();
+            if (k && import.meta.env.PROD && !inHaushaltApp) void meldeGeraet();
         } catch {
             setOffline(true);
         }
@@ -187,7 +188,9 @@ function Rezepte({ konto, offline, setze, abgleichen }: {
                 <h2 className="section-title">Konto</h2>
                 <div className="card stack">
                     <p className="sd-konto">Angemeldet als <strong>{konto.name}</strong></p>
-                    {mitteilungen !== 'granted' && (
+                    {inHaushaltApp ? (
+                        <p className="muted small">Mitteilungen des Back-Timers kommen über die Haushalt-App.</p>
+                    ) : mitteilungen !== 'granted' && (
                         <p className="muted small">
                             {mitteilungen === 'denied'
                                 ? 'Mitteilungen sind für diese Seite im Browser abgeschaltet.'
@@ -197,7 +200,7 @@ function Rezepte({ konto, offline, setze, abgleichen }: {
                         </p>
                     )}
                     <div className="row">
-                        {mitteilungen === 'default' && (
+                        {!inHaushaltApp && mitteilungen === 'default' && (
                             <button type="button" className="btn accent-fill" onClick={einschalten}>Mitteilungen einschalten</button>
                         )}
                         <button type="button" className="btn" onClick={geraetecode}>Weiteres Gerät anmelden</button>
@@ -232,6 +235,8 @@ function Rezepte({ konto, offline, setze, abgleichen }: {
     );
 }
 
+// In der iOS-App von Haushalt: Back-Timer an die App, die meldet (vor dem ersten Zeichnen, wegen der Mitteilungs-Attrappe)
+void installiereHaushaltApp();
 installiereBlaetter();
 createRoot(document.getElementById('app')!).render(
     <StrictMode>{location.pathname.replace(/\/$/, '') === '/admin' ? <Admin /> : <App />}</StrictMode>,
@@ -240,7 +245,7 @@ createRoot(document.getElementById('app')!).render(
 // Offline-Betrieb (nur im Build, im Dev-Server würde der Cache stören)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js')
-        .then(installiereFernPush) // Back-Timer: Push vom Server ab „Backen beginnen“
+        .then(() => { if (!inHaushaltApp) installiereFernPush(); }) // Back-Timer: Push vom Server ab „Backen beginnen“
         .catch(() => { /* App läuft auch ohne */ });
     // Offline-Kopie der Rezepte vor automatischem Löschen durch den Browser schützen
     navigator.storage?.persist?.().catch(() => { /* ignorieren */ });
