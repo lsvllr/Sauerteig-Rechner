@@ -3,7 +3,9 @@
 // keine Notification-API und keinen Push; damit der Rechner (src/gemeinsam, aus der Haushalt-App übernommen)
 // trotzdem „Mitteilungen an“ zeigt, setzt diese Datei eine Attrappe ein, die nichts anzeigt.
 // Außerhalb der App tut sie nichts.
-import { VORLAUF_WAHL, beendeLauf, setzeFernPush, starteLauf, timerStore, type Lauf } from './gemeinsam/timer';
+import { setzeFernPush, timerStore, type Lauf } from './gemeinsam/timer';
+import { alsLauf, kern, kernText, type Kern } from './laufKern';
+import { geaendert, uebernimm } from './abgleich';
 
 interface AppAntwort {
     ok?: boolean;
@@ -31,44 +33,6 @@ const app: Bruecke | undefined =
 /** Läuft die Seite in der Haushalt-App? */
 export const inHaushaltApp = !!app;
 
-/** Lauf ohne die Felder, die nur diese Seite braucht (gemeldet, fern). */
-type Kern = Omit<Lauf, 'gemeldet' | 'fern'>;
-
-const kern = (l: Lauf | null): Kern | null =>
-    l && {
-        phase: l.phase,
-        start: l.start,
-        reife: [l.reife[0], l.reife[1]],
-        erstellt: l.erstellt,
-        vorlauf: l.vorlauf,
-        schritte: l.schritte.map(({ at, titel, dauer }) => ({ at, titel, dauer })),
-        ...(l.weiter === undefined ? {} : { weiter: l.weiter }),
-    };
-
-const zahl = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
-
-/** Lauf aus der App prüfen; undefined = unbrauchbar. */
-function alsLauf(x: unknown): Lauf | null | undefined {
-    if (x === null) return null;
-    const l = x as Partial<Lauf> | undefined;
-    if (
-        !l ||
-        (l.phase !== 'reifen' && l.phase !== 'backen') ||
-        !zahl(l.start) ||
-        !zahl(l.erstellt) ||
-        !zahl(l.vorlauf) ||
-        !VORLAUF_WAHL.includes(l.vorlauf) ||
-        !Array.isArray(l.reife) ||
-        !zahl(l.reife[0]) ||
-        !zahl(l.reife[1]) ||
-        !Array.isArray(l.schritte) ||
-        !l.schritte.every((s) => s && zahl(s.at) && typeof s.titel === 'string' && typeof s.dauer === 'string') ||
-        (l.weiter !== undefined && !zahl(l.weiter))
-    )
-        return undefined;
-    return { ...(kern(l as Lauf) as Kern), gemeldet: [] };
-}
-
 let mitteilungenAn = true;
 let letzt = '';
 /** Antwort auf das zuletzt Geschickte (auch noch unterwegs) */
@@ -93,7 +57,8 @@ function anApp(l: Lauf | null): Promise<AppAntwort | null> {
     return antwort;
 }
 
-/** Stand der App übernehmen (z. B. dort abgehakt oder beendet, oder im eingebauten Rechner gestartet). */
+/** Stand der App übernehmen, wenn er neuer ist (z. B. dort abgehakt oder im eingebauten Rechner gestartet); sonst
+ * bekommt die App den Stand der Seite. Ein Beenden in der App hat keinen Zeitpunkt und kommt so nicht an. */
 async function holeStand(): Promise<void> {
     const vorher = letzt;
     let r: AppAntwort | undefined;
@@ -105,15 +70,20 @@ async function holeStand(): Promise<void> {
     if (!r || !('lauf' in r) || letzt !== vorher) return; // keine Antwort, oder hier inzwischen geändert
     const neu = alsLauf(r.lauf);
     if (neu === undefined) return;
-    const s = JSON.stringify(kern(neu));
-    if (s === JSON.stringify(kern(timerStore.lauf()))) {
+    const lokal = timerStore.lauf();
+    const s = kernText(neu);
+    if (s === kernText(lokal)) {
         letzt = s;
         return;
     }
-    letzt = s; // kommt von der App, nicht zurückschicken
-    antwort = Promise.resolve({ ok: true, push: true });
-    if (neu) starteLauf(neu); // Vergangenes gilt dabei als gemeldet
-    else beendeLauf();
+    if (neu && neu.erstellt > (lokal?.erstellt ?? 0) && neu.erstellt > geaendert()) {
+        letzt = s; // kommt von der App, nicht zurückschicken
+        antwort = Promise.resolve({ ok: true, push: neu.phase === 'backen' });
+        uebernimm(neu, neu.erstellt, true); // und an den Server
+    } else {
+        letzt = s; // App hat anderes: ihr den Stand der Seite schicken
+        void anApp(lokal);
+    }
 }
 
 /** Attrappe der Notification-API: zeigt nichts, die Mitteilungen kommen von der App. */
@@ -149,4 +119,7 @@ export async function installiereHaushaltApp(): Promise<void> {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') void holeStand();
     });
+    // Die App meldet einen neuen Stand, während die Seite offen ist (z. B. in der Live-Aktivität weitergeklickt):
+    // webView.evaluateJavaScript("dispatchEvent(new Event('haushaltTimer'))")
+    window.addEventListener('haushaltTimer', () => void holeStand());
 }

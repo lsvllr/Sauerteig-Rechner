@@ -252,6 +252,7 @@ export function starteLauf(l: Lauf): void {
   }
   faellig(l, Date.now()); // schon Vergangenes (Start in der Vergangenheit) nicht nachmelden
   setze(l);
+  fernPlanen(l); // übernommener Stand (anderes Gerät) schon in der Backphase
 }
 
 export function aendereVorlauf(vorlauf: number): void {

@@ -1,8 +1,10 @@
-// Push vom eigenen Server (server/server.ts) ab „Backen beginnen“: Push-Abo dieses Geräts beim Konto anmelden und
-// den Zeitplan melden. Der Server schickt die Meldungen an alle Geräte des Kontos; klappt das Melden, zeigt der
-// Browser keine eigenen Mitteilungen mehr (timer.ts, „fern“).
+// Push vom eigenen Server (server/server.ts) ab „Backen beginnen“: Push-Abo dieses Geräts beim Konto anmelden. Den
+// Zeitplan bekommt der Server über den Abgleich (abgleich.ts) und schickt die Meldungen an alle Geräte des Kontos;
+// hat dieses Gerät ein Abo und ist der Stand beim Server, zeigt der Browser keine eigenen Mitteilungen
+// (timer.ts, „fern“).
 import { setzeFernPush } from './gemeinsam/timer';
 import { post } from './api';
+import { synchron } from './abgleich';
 
 const b64 = (s: string) => {
     const roh = atob((s + '='.repeat((4 - (s.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
@@ -47,14 +49,14 @@ export async function vergissPush(): Promise<string | undefined> {
 
 export function installiereFernPush(): void {
     setzeFernPush({
-        async plane(lauf) {
+        async plane() {
             const a = await abo();
             if (!a) return false;
-            const r = await post('/api/timer', { abo: a.toJSON(), lauf });
-            return r.ok;
+            const r = await post('/api/push-abo', { abo: a.toJSON() });
+            return r.ok && (await synchron());
         },
         async stoppe() {
-            await post('/api/timer/stop');
+            /* das Beenden geht über den Abgleich an den Server */
         },
     });
 }

@@ -4,7 +4,8 @@
 // Konten nur mit Einladungscode vom Admin (ADMIN_PASSWORD, Seite /admin). Wie in der Haushalt-App hat jedes Konto
 // höchstens einen Backlauf, und die Meldungen gehen an alle Geräte des Kontos. Fällig wird nach denselben Regeln
 // wie im Browser (faellig() aus src/gemeinsam/timer.ts). Der Backlauf liegt in der Datenbank und übersteht so einen
-// Neustart; die App meldet ihn beim Öffnen außerdem erneut (setzeFernPush in timer.ts).
+// Neustart. Den Zeitplan bekommt der Server über den Abgleich der Geräte (/api/timer/stand, src/abgleich.ts);
+// /api/timer (POST) und /api/timer/stop bleiben für ältere, noch zwischengespeicherte Versionen der App.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -12,6 +13,7 @@ import { extname, join, normalize } from 'node:path';
 import webpush from 'web-push';
 import { BEGINN, VORLAUF_WAHL, faellig, type Lauf } from '../src/gemeinsam/timer';
 import * as db from './db';
+import { alsLauf, kern, kernText } from '../src/laufKern';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DIST = process.env.DIST ?? join(process.cwd(), 'dist');
@@ -345,6 +347,30 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     faellig(lauf, Date.now()); // schon Vergangenes als gemeldet merken
     db.setzeBacklauf(konto.id, lauf);
     return json(res, 200, { ok: true });
+  }
+  // Abgleich des Back-Timers zwischen den Geräten (src/abgleich.ts): es gilt die neueste Änderung.
+  if (pfad === '/api/timer' && m === 'GET') return json(res, 200, { ok: true, ...db.timerStand(konto.id) });
+  if (pfad === '/api/timer/stand' && m === 'POST') {
+    const d = await lies(req);
+    const jetzt = Date.now();
+    const lauf = alsLauf(d.lauf ?? null);
+    if (lauf === undefined || !istZahl(d.geaendert) || d.geaendert <= 0) return fehler(res, 400, 'Timer nicht lesbar');
+    if (lauf && lauf.schritte.some((s) => Math.abs(s.at - jetzt) > 7 * 24 * 3600_000))
+      return fehler(res, 400, 'Timer nicht lesbar');
+    const geaendert = Math.min(d.geaendert, jetzt + 60_000); // vorgehende Uhr des Geräts gewinnt nicht ewig
+    const alt = db.timerStand(konto.id);
+    if (geaendert <= alt.geaendert) return json(res, 200, { ok: true, ...alt }); // anderes Gerät war neuer
+    db.setzeTimerStand(konto.id, kern(lauf), geaendert);
+    // Push nur neu planen, wenn sich der Zeitplan geändert hat (sonst kämen Meldungen doppelt oder gar nicht)
+    const vorher = alsLauf(alt.lauf);
+    if (kernText(lauf) !== kernText(vorher ?? null)) {
+      const push = lauf?.phase === 'backen' ? pruefeLauf(lauf, jetzt) : null;
+      if (push) {
+        faellig(push, jetzt); // schon Vergangenes als gemeldet merken
+        db.setzeBacklauf(konto.id, push);
+      } else db.loescheBacklauf(konto.id);
+    }
+    return json(res, 200, { ok: true, lauf: kern(lauf), geaendert });
   }
   if (pfad === '/api/push-abo' && m === 'POST') {
     const abo = pruefeAbo((await lies(req)).abo);

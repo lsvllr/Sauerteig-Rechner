@@ -1,13 +1,14 @@
 // Eigenständiger Sauerteig-Rechner: Oberfläche und Design aus der Haushalt-App (src/gemeinsam, übernommen mit
 // scripts/sync-haushalt.sh). Konten nur mit Einladung (zugang.tsx, Admin unter /admin), Rezepte im Konto auf dem
-// Server mit Kopie im Browser für den Offline-Betrieb (speicher.ts). Der Server (server/server.ts) schickt die
-// Erinnerungen des Back-Timers per Push an alle Geräte des Kontos (fern.ts).
+// Server mit Kopie im Browser für den Offline-Betrieb (speicher.ts). Der Back-Timer gleicht sich zwischen den Geräten
+// des Kontos ab (abgleich.ts); der Server (server/server.ts) schickt seine Erinnerungen per Push an alle Geräte
+// des Kontos (fern.ts).
 import { StrictMode, useEffect, useState, type FormEvent, type FormHTMLAttributes } from 'react';
 import { createRoot } from 'react-dom/client';
 import './gemeinsam/haushalt.css';
 import './app.css';
 import { Rechner, START, alsEinstellungen, type Rezept, type Werte } from './gemeinsam/Oberflaeche';
-import { beendeLauf } from './gemeinsam/timer';
+import { starteAbgleich, trenneAbgleich } from './abgleich';
 import { leseKonto, merkeKonto, type Einstellungen, type KontoRezept, type KontoStand } from './speicher';
 import { Offline, post, rufe } from './api';
 import { installiereFernPush, meldeGeraet, vergissPush } from './fern';
@@ -34,6 +35,13 @@ function App() {
         merkeKonto(k);
         setKonto(k);
     };
+
+    // Back-Timer mit den anderen Geräten des Kontos abgleichen; abgemeldet nur noch auf diesem Gerät beenden
+    const angemeldet = konto === undefined ? undefined : !!konto;
+    useEffect(() => {
+        if (angemeldet) starteAbgleich();
+        else if (angemeldet === false) trenneAbgleich();
+    }, [angemeldet]);
 
     const abgleichen = async () => {
         try {
@@ -158,7 +166,6 @@ function Rezepte({ konto, offline, setze, abgleichen }: {
             ohneNetz();
             return;
         }
-        beendeLauf();
         setze(null);
     };
 

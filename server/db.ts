@@ -63,6 +63,12 @@ db.exec(`
     konto_id INTEGER PRIMARY KEY REFERENCES konten(id) ON DELETE CASCADE,
     lauf TEXT NOT NULL
   );
+  -- Back-Timer, wie die Geräte des Kontos ihn zeigen (auch Reifezeit; NULL = beendet), mit Zeitpunkt der Änderung
+  CREATE TABLE IF NOT EXISTS timer_staende (
+    konto_id INTEGER PRIMARY KEY REFERENCES konten(id) ON DELETE CASCADE,
+    lauf TEXT,
+    geaendert INTEGER NOT NULL
+  );
 `);
 
 /** Beim Beenden: WAL zurückschreiben, damit die Sicherung nur sauerteig.db braucht. */
@@ -270,6 +276,25 @@ export function backlaeufe(): { kontoId: number; lauf: Lauf }[] {
     kontoId: b.konto_id,
     lauf: JSON.parse(b.lauf),
   }));
+}
+
+/** Back-Timer des Kontos für den Abgleich zwischen den Geräten (ohne Eintrag: keiner, Zeitpunkt 0). */
+export function timerStand(kontoId: number): { lauf: unknown; geaendert: number } {
+  const z = eine<{ lauf: string | null; geaendert: number }>(
+    'SELECT lauf, geaendert FROM timer_staende WHERE konto_id = ?',
+    kontoId,
+  );
+  return z ? { lauf: z.lauf === null ? null : JSON.parse(z.lauf), geaendert: z.geaendert } : { lauf: null, geaendert: 0 };
+}
+
+export function setzeTimerStand(kontoId: number, lauf: unknown, geaendert: number): void {
+  tue(
+    `INSERT INTO timer_staende VALUES (?, ?, ?)
+     ON CONFLICT(konto_id) DO UPDATE SET lauf = excluded.lauf, geaendert = excluded.geaendert`,
+    kontoId,
+    lauf === null ? null : JSON.stringify(lauf),
+    geaendert,
+  );
 }
 
 export function anzahlBacklaeufe(): number {
