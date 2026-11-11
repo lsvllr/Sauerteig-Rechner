@@ -223,6 +223,18 @@
   align-items: center;
   gap: 6px;
 }
+.sd-abhaken-knoepfe {
+  display: inline-flex;
+  gap: 8px;
+}
+.sd-abhaken-zeit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sd-abhaken-zeit input {
+  width: auto;
+}
 .sd-acc-body {
   padding: 0 0 4px;
 }

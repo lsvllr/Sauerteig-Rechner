@@ -104,16 +104,17 @@ export function offenAb(l: Lauf): number {
   return l.weiter ?? (l.phase === 'reifen' ? BEGINN : BEGINN + 1);
 }
 
-/** Schritt ``i`` jetzt erledigt: er bekommt die Uhrzeit jetzt, alle späteren verschieben sich um denselben Betrag
- * (später erledigt → später, früher → früher) und gelten als offen. Danach Phase „backen“. */
-export function hakeAbAm(l: Lauf, i: number, jetzt: number): Lauf {
+/** Schritt ``i`` um ``am`` erledigt (Standard jetzt; früher, wenn das Weiterklicken vergessen wurde): er bekommt
+ * diese Uhrzeit, alle späteren verschieben sich um denselben Betrag (später erledigt → später, früher → früher)
+ * und gelten als offen. Danach Phase „backen“. Was vor ``jetzt`` fällig war, meldet sich nicht mehr. */
+export function hakeAbAm(l: Lauf, i: number, am: number, jetzt = am): Lauf {
   const s = l.schritte[i];
-  const d = s ? jetzt - s.at : 0;
+  const d = s ? am - s.at : 0;
   const backen = l.phase === 'backen';
   return {
     ...l,
     phase: 'backen',
-    erstellt: jetzt,
+    erstellt: Math.max(am, jetzt),
     weiter: i + 1,
     // Meldungen der verschobenen Schritte neu
     gemeldet: backen ? l.gemeldet.filter((k) => parseInt(k, 10) < i) : [],
@@ -277,11 +278,12 @@ export function beginneBacken(): void {
   if (lauf?.phase === 'reifen') hakeAb(BEGINN);
 }
 
-/** Abhaken: der nächste offene Schritt, oder ein erledigter neu auf jetzt (nicht das Ansetzen, das ist der Start). */
-export function hakeAb(i: number): void {
+/** Abhaken: der nächste offene Schritt, oder ein erledigter neu (nicht das Ansetzen, das ist der Start); ``am``
+ * ist die Uhrzeit des Erledigens, Standard jetzt, nicht in der Zukunft. */
+export function hakeAb(i: number, am?: number): void {
   if (!lauf || i < BEGINN || i > offenAb(lauf)) return;
   const jetzt = Date.now();
-  const l = hakeAbAm(lauf, i, jetzt);
+  const l = hakeAbAm(lauf, i, Math.min(am ?? jetzt, jetzt), jetzt);
   faellig(l, jetzt);
   setze(l);
   fernPlanen(l);

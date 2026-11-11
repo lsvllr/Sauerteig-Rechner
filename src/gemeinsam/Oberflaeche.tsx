@@ -15,7 +15,7 @@ import {
   type SchrittArt,
 } from './rechner';
 import { Symbol } from './symbole';
-import { BEGINN, hakeAb, offenAb, uhrzeit } from './timer';
+import { BEGINN, hakeAb, offenAb, uhrzeit, type Lauf } from './timer';
 import { TimerKarte, TimerStart, useJetzt, useLauf, useMeldungen } from './TimerKarte';
 import './sauerteig.css';
 
@@ -311,6 +311,75 @@ function dauerMinuten(d: string): number {
 
 /** Alle Schritte mit Zutaten und Anleitung; immer nur einer ist offen. Läuft der Timer, sind die Zeiten
  * Uhrzeiten, der nächste offene Schritt klappt von selbst auf und lässt sich abhaken. */
+
+const hhmm = (ms: number) => {
+  const d = new Date(ms);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+/** „HH:MM“ als letzter solcher Zeitpunkt bis jetzt (später als jetzt → gestern). */
+function zeitpunkt(hm: string, jetzt: number): number | null {
+  const [h, m] = hm.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  const d = new Date(jetzt);
+  d.setHours(h!, m!, 0, 0);
+  if (d.getTime() > jetzt) d.setDate(d.getDate() - 1);
+  return d.getTime();
+}
+
+/** Schritt abhaken oder aktualisieren; über die Uhr daneben mit anderer Uhrzeit (Weiterklicken vergessen). */
+function Abhaken({ l, i, erledigt, jetzt, fertig }: {
+  l: Lauf;
+  i: number;
+  erledigt: boolean;
+  jetzt: number;
+  fertig: () => void;
+}) {
+  // null = jetzt; sonst die eingestellte Uhrzeit (beim Öffnen die aktuelle)
+  const [zeit, setZeit] = useState<string | null>(null);
+  const am = zeit === null ? null : zeitpunkt(zeit, jetzt);
+  const label = erledigt ? 'Aktualisieren' : 'Erledigt';
+  return (
+    <div className="sd-no-print sd-abhaken">
+      <span className="sd-abhaken-knoepfe">
+        <button
+          type="button"
+          className={erledigt ? 'btn' : 'btn accent-fill'}
+          disabled={zeit !== null && am === null}
+          onClick={() => {
+            hakeAb(i, am ?? undefined);
+            fertig();
+          }}
+        >
+          <Symbol name="check" size={18} />
+          {am === null ? label : `${label}: ${uhrzeit(am, jetzt)}`}
+        </button>
+        <button
+          type="button"
+          className={zeit === null ? 'btn icon-btn' : 'btn icon-btn accent-fill'}
+          aria-label="Andere Uhrzeit"
+          aria-pressed={zeit !== null}
+          onClick={() => setZeit(zeit === null ? hhmm(Date.now()) : null)}
+        >
+          <Symbol name="clock" size={20} />
+        </button>
+      </span>
+      {zeit !== null && (
+        <label className="sd-abhaken-zeit">
+          <span className="muted small">{erledigt ? 'Erledigt um' : 'Erledigt schon um'}</span>
+          <input type="time" value={zeit} onChange={(e) => setZeit(e.target.value)} />
+        </label>
+      )}
+      {erledigt && zeit === null && (
+        <span className="muted small">
+          Erledigt um {uhrzeit(l.schritte[i]!.at, jetzt)}. Aktualisieren setzt ihn auf jetzt, die folgenden Schritte
+          rücken mit. Mit der Uhr eine andere Uhrzeit wählen.
+        </span>
+      )}
+    </div>
+  );
+}
+
 function Ablauf({
   r,
   w,
@@ -377,25 +446,14 @@ function Ablauf({
               <div className="sd-acc-body" id={`sd-schritt-${i}`} hidden={i !== offen}>
                 <Anleitung art={art} r={r} w={w} />
                 {l && i >= BEGINN && i <= weiter && (
-                  <div className="sd-no-print sd-abhaken">
-                    <button
-                      type="button"
-                      className={erledigt ? 'btn' : 'btn accent-fill'}
-                      onClick={() => {
-                        hakeAb(i);
-                        setOffen(i + 1);
-                      }}
-                    >
-                      <Symbol name="check" size={18} />
-                      {erledigt ? 'Aktualisieren' : 'Erledigt'}
-                    </button>
-                    {erledigt && (
-                      <span className="muted small">
-                        Erledigt um {uhrzeit(l.schritte[i]!.at, jetzt)}. Aktualisieren setzt ihn auf jetzt, die
-                        folgenden Schritte rücken mit.
-                      </span>
-                    )}
-                  </div>
+                  <Abhaken
+                    key={`${i}:${erledigt}`}
+                    l={l}
+                    i={i}
+                    erledigt={erledigt}
+                    jetzt={jetzt}
+                    fertig={() => setOffen(i + 1)}
+                  />
                 )}
                 {art === 'ansetzen' && (
                   <TimerStart
