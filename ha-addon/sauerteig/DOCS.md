@@ -18,11 +18,19 @@ der Admin für ein Konto.
 - **vapid_public_key** / **vapid_private_key**: Schlüssel für Web-Push. Leer lassen: Das Add-on erzeugt beim
   ersten Start ein Paar und speichert es in `/data/vapid.json`.
 
+- **apns_key_id** / **apns_team_id** / **apns_topic** / **apns_key**: Weckdienst für die iOS-App. Er schaltet die
+  Live-Aktivität des Back-Timers auf dem Sperrbildschirm zum nächsten Schritt weiter, auch wenn die App zu ist.
+  Schlüssel unter developer.apple.com > Certificates, IDs & Profiles > Keys mit „Apple Push Notifications
+  service (APNs)“ anlegen. `apns_key_id` = Key ID, `apns_team_id` = Team ID, `apns_topic` = Bundle-ID der App,
+  `apns_key` = Inhalt der `.p8`-Datei (alternativ die Datei als `/data/apns.p8` ablegen). Leer: Die Aktivität
+  schaltet nur weiter, solange die App läuft; Mitteilungen kommen trotzdem (die plant das iPhone selbst).
+
 Nach dem Ändern speichern und das Add-on neu starten.
 
 ## Daten
 
-`/data/sauerteig.db` (SQLite: Konten, Rezepte, Push-Abos, laufende Back-Timer) und `/data/vapid.json`. Beide
+`/data/sauerteig.db` (SQLite: Konten, Rezepte, Push-Abos, laufende Back-Timer, Weckdienst: nur Push-Token und
+Uhrzeiten der Live-Aktivitäten) und `/data/vapid.json`. Beide
 sind in den HA-Backups enthalten. Während eines Backups stoppt das Add-on kurz.
 
 ## Erreichbarkeit

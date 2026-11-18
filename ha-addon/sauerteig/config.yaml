@@ -13,7 +13,8 @@ startup: application
 boot: auto
 # HA startet das Add-on neu, wenn /healthz nicht mehr antwortet.
 watchdog: http://[HOST]:[PORT:8080]/healthz
-# Daten in /data: sauerteig.db (Konten, Rezepte, Push-Abos, laufende Back-Timer) und ggf. vapid.json.
+# Daten in /data: sauerteig.db (Konten, Rezepte, Push-Abos, laufende Back-Timer, Weckdienst der iOS-App),
+# ggf. vapid.json und apns.p8.
 # Während der HA-Sicherung kurz stoppen: SQLite wird dann sauber gesichert.
 backup: cold
 timeout: 20
@@ -24,8 +25,16 @@ options:
   admin_password: ""
   vapid_public_key: ""
   vapid_private_key: ""
+  apns_key_id: ""
+  apns_team_id: ""
+  apns_topic: "de.eliasvollrath.sauerteig"
+  apns_key: ""
 schema:
   app_url: url
   admin_password: password?
   vapid_public_key: str?
   vapid_private_key: password?
+  apns_key_id: str?
+  apns_team_id: str?
+  apns_topic: str?
+  apns_key: password?

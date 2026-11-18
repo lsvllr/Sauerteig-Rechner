@@ -69,6 +69,14 @@ db.exec(`
     lauf TEXT,
     geaendert INTEGER NOT NULL
   );
+  -- Weckdienst der iOS-App: Push-Token einer Live-Aktivität, Zeiten der Back-Schritte (JSON, ms), zuletzt
+  -- gemeldeter Schritt. Kein Konto, keine Rezeptdaten (server/wecker.ts).
+  CREATE TABLE IF NOT EXISTS wecker (
+    token TEXT PRIMARY KEY,
+    zeiten TEXT NOT NULL,
+    gesendet INTEGER NOT NULL,
+    erstellt INTEGER NOT NULL
+  );
 `);
 
 /** Beim Beenden: WAL zurückschreiben, damit die Sicherung nur sauerteig.db braucht. */
@@ -299,6 +307,45 @@ export function setzeTimerStand(kontoId: number, lauf: unknown, geaendert: numbe
 
 export function anzahlBacklaeufe(): number {
   return eine<{ n: number }>('SELECT COUNT(*) AS n FROM backlaeufe')!.n;
+}
+
+/* ---------------------------------------------------------------- Wecker */
+
+export interface WeckerZeile {
+  token: string;
+  zeiten: number[];
+  gesendet: number;
+}
+
+/** Gleicher Token erneut: ersetzt Zeiten und Stand. */
+export function setzeWecker(w: WeckerZeile): void {
+  tue(
+    `INSERT INTO wecker VALUES (?, ?, ?, ?)
+     ON CONFLICT(token) DO UPDATE SET zeiten = excluded.zeiten, gesendet = excluded.gesendet`,
+    w.token,
+    JSON.stringify(w.zeiten),
+    w.gesendet,
+    Date.now(),
+  );
+}
+
+export function setzeWeckerGesendet(token: string, zeiten: number[], gesendet: number): void {
+  // Nur, solange inzwischen keine neuen Zeiten gemeldet wurden.
+  tue('UPDATE wecker SET gesendet = ? WHERE token = ? AND zeiten = ?', gesendet, token, JSON.stringify(zeiten));
+}
+
+export function loescheWecker(token: string): void {
+  tue('DELETE FROM wecker WHERE token = ?', token);
+}
+
+export function wecker(): WeckerZeile[] {
+  return alle<{ token: string; zeiten: string; gesendet: number }>('SELECT token, zeiten, gesendet FROM wecker').map(
+    (w) => ({ token: w.token, zeiten: JSON.parse(w.zeiten), gesendet: w.gesendet }),
+  );
+}
+
+export function anzahlWecker(): number {
+  return eine<{ n: number }>('SELECT COUNT(*) AS n FROM wecker')!.n;
 }
 
 /* ------------------------------------------------------------------- Admin */

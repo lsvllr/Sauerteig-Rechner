@@ -6,13 +6,16 @@
 // wie im Browser (faellig() aus src/gemeinsam/timer.ts). Der Backlauf liegt in der Datenbank und übersteht so einen
 // Neustart. Den Zeitplan bekommt der Server über den Abgleich der Geräte (/api/timer/stand, src/abgleich.ts);
 // /api/timer (POST) und /api/timer/stop bleiben für ältere, noch zwischengespeicherte Versionen der App.
+// Dazu der Weckdienst der iOS-App (/api/wecker, server/wecker.ts): schaltet deren Live-Aktivität per APNs weiter.
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import webpush from 'web-push';
 import { BEGINN, VORLAUF_WAHL, faellig, type Lauf } from '../src/gemeinsam/timer';
+import * as apns from './apns';
 import * as db from './db';
+import * as wecker from './wecker';
 import { alsLauf, kern, kernText } from '../src/laufKern';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -144,7 +147,9 @@ async function tick(): Promise<void> {
 
 setInterval(() => {
   tick().catch((err) => console.warn('Back-Timer:', err));
+  wecker.tick().catch((err) => console.warn('Wecker:', err));
 }, TAKT);
+console.log(apns.aktiv() ? `APNs aktiv (${apns.TOPIC})` : 'APNs aus: Live-Aktivitäten der iOS-App schalten nur bei offener App weiter.');
 
 /* -------------------------------------------------------- Schutz vor Raten */
 
@@ -160,6 +165,18 @@ function fehlversuch(ip: string): void {
   if (!v || v.bis < Date.now()) versuche.set(ip, { n: 1, bis: Date.now() + SPERRE });
   else v.n++;
   if (versuche.size > 10_000) versuche.clear();
+}
+
+/** Weckdienst ohne Anmeldung: höchstens 120 Anfragen je IP in 15 Minuten. */
+const weckerAnfragen = new Map<string, { n: number; bis: number }>();
+function weckerZuViel(ip: string): boolean {
+  const v = weckerAnfragen.get(ip);
+  if (!v || v.bis < Date.now()) {
+    if (weckerAnfragen.size > 10_000) weckerAnfragen.clear();
+    weckerAnfragen.set(ip, { n: 1, bis: Date.now() + SPERRE });
+    return false;
+  }
+  return ++v.n > 120;
 }
 
 function clientIp(req: IncomingMessage): string {
@@ -275,6 +292,22 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
 
   /* ---------- ohne Anmeldung ---------- */
   if (pfad === '/api/push-key' && m === 'GET') return json(res, 200, { key: schluessel.publicKey });
+
+  // Weckdienst der iOS-App: kennt nur Token und Zeitpunkte, daher ohne Konto.
+  if ((pfad === '/api/wecker' || pfad === '/api/wecker/stop') && m === 'POST') {
+    if (weckerZuViel(ip)) return fehler(res, 429, 'Zu viele Anfragen');
+    const d = await lies(req);
+    if (pfad === '/api/wecker/stop') {
+      const t = typeof d.token === 'string' ? d.token.toLowerCase() : '';
+      if (!apns.zerlege(t)) return fehler(res, 400, 'Token fehlt');
+      await wecker.stoppen(t);
+      return json(res, 200, { ok: true });
+    }
+    const w = wecker.pruefe(d, Date.now());
+    if (!w) return fehler(res, 400, 'Ungültig');
+    if (!wecker.anmelden(w.token, w.zeiten, Date.now())) return fehler(res, 503, 'Voll');
+    return json(res, 200, { ok: true, apns: apns.aktiv() });
+  }
 
   if (pfad === '/api/registrieren' && m === 'POST') {
     if (gesperrt(ip)) return fehler(res, 429, 'Zu viele Versuche, bitte später noch einmal');

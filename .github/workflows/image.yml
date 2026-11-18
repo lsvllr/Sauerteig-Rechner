@@ -12,6 +12,10 @@ name: Image bauen
 on:
   push:
     branches: [main]
+    # Die iOS-App baut .github/workflows/testflight.yml
+    paths-ignore:
+      - 'ios/**'
+      - '.github/workflows/testflight.yml'
   workflow_dispatch:
 
 concurrency: image-build
