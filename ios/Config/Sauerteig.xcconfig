@@ -1,0 +1,22 @@
+// Einstellungen für das Apple-Entwicklerkonto und den Server. Nur diese Datei anpassen; das Projekt liest sie für
+// App und Widget-Erweiterung, Debug und Release.
+
+// Apple-Team-ID (Xcode → Settings → Accounts) und Bundle-ID. Die Widget-Erweiterung (Live-Aktivität) bekommt
+// $(APP_BUNDLE_ID).widgets.
+DEVELOPMENT_TEAM = GT7LHGM254
+APP_BUNDLE_ID = de.eliasvollrath.sauerteig
+
+// Server mit dem Weckdienst (/api/wecker): schaltet die Live-Aktivität bei geschlossener App weiter.
+// Leer lassen: alles läuft ohne Server, die Aktivität springt dann erst beim Öffnen der App zum nächsten Schritt.
+// Das doppelte Schrägstrich-Problem in xcconfig umgeht $(SLASH).
+SLASH = /
+WECKER_URL = https:$(SLASH)$(SLASH)sauerteig.vollrath.app
+
+// Push für die Live-Aktivität braucht das bezahlte Apple Developer Program.
+// Kostenloses Konto („Personal Team“): leer lassen, dann ohne Weckdienst.
+CODE_SIGN_ENTITLEMENTS = Config/Sauerteig.entitlements
+
+// Version für TestFlight/App Store. Die Build-Nummer setzen Tools/testflight.sh und der GitHub-Workflow selbst
+// (JJMMTT.HHMM, UTC).
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1

@@ -1,0 +1,122 @@
+# Baut die iOS-App (ios/) auf einem Mac-Runner und lädt sie zu TestFlight hoch.
+# Läuft bei jedem Push auf main, der ios/ ändert, und von Hand: Actions > „TestFlight“ > Run workflow.
+# (Das Repo ist öffentlich, macOS-Minuten kosten dann nichts.)
+#
+# Einrichten (einmalig):
+#   1. App Store Connect > Apps > „+“ > Neue App: Bundle-ID de.eliasvollrath.sauerteig, Name z. B. Sauerteig.
+#   2. App Store Connect > Benutzer und Zugriff > Integrationen > App Store Connect API > Team-Schlüssel
+#      anlegen, Rolle „Admin“ (nötig, damit Xcode das Verteilungszertifikat und die Profile in der Cloud verwalten
+#      darf). .p8 herunterladen (geht nur einmal), Key ID und Issuer ID notieren.
+#   3. GitHub > Settings > Secrets and variables > Actions > Secrets:
+#        ASC_KEY_ID      Key ID des Schlüssels
+#        ASC_ISSUER_ID   Issuer ID (steht über der Schlüsselliste)
+#        ASC_KEY_P8      kompletter Inhalt der .p8-Datei (inkl. BEGIN/END-Zeilen)
+#   Ohne diese Secrets wird der Lauf übersprungen (mit Hinweis), statt zu scheitern.
+#
+# Versionsnummer: MARKETING_VERSION in ios/Config/Sauerteig.xcconfig. Die Build-Nummer kommt aus Datum und Uhrzeit
+# (UTC, JJMMTT.HHMM), genau wie bei ios/Tools/testflight.sh auf dem Mac. So passen beide Wege zusammen.
+name: TestFlight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/testflight.yml'
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Was ist neu? (nur für die Zusammenfassung des Laufs)"
+        required: false
+
+concurrency: testflight
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: ios
+    env:
+      HAT_SCHLUESSEL: ${{ secrets.ASC_KEY_P8 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' }}
+    steps:
+      - name: Secrets prüfen
+        if: env.HAT_SCHLUESSEL != 'true'
+        working-directory: .
+        run: |
+          echo "::notice::ASC_KEY_ID, ASC_ISSUER_ID oder ASC_KEY_P8 fehlen – TestFlight-Upload übersprungen (siehe Kopf von .github/workflows/testflight.yml)."
+          echo "### TestFlight übersprungen: Secrets fehlen" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v4
+        if: env.HAT_SCHLUESSEL == 'true'
+
+      # Apple nimmt nur Builds mit aktuellem SDK an.
+      - uses: maxim-lobanov/setup-xcode@v1
+        if: env.HAT_SCHLUESSEL == 'true'
+        with:
+          xcode-version: latest-stable
+
+      - name: Kern prüfen
+        if: env.HAT_SCHLUESSEL == 'true'
+        run: Tools/pruefe_kern.sh
+
+      - name: API-Schlüssel ablegen
+        if: env.HAT_SCHLUESSEL == 'true'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$(date -u +%y%m%d.%H%M)" >> "$GITHUB_ENV"
+
+      - name: Archivieren
+        if: env.HAT_SCHLUESSEL == 'true'
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project Sauerteig.xcodeproj \
+            -scheme Sauerteig \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Sauerteig.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            | xcbeautify --renderer github-actions
+
+      - name: Signieren und zu TestFlight hochladen
+        if: env.HAT_SCHLUESSEL == 'true'
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Sauerteig.xcarchive" \
+            -exportOptionsPlist Config/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
+            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+
+      - name: Zusammenfassung
+        if: success() && env.HAT_SCHLUESSEL == 'true'
+        env:
+          NOTES: ${{ inputs.notes }}
+        run: |
+          V=$(grep -E '^MARKETING_VERSION' Config/Sauerteig.xcconfig | sed 's/.*= *//')
+          {
+            echo "### Hochgeladen: Version $V ($BUILD_NUMBER)"
+            echo "Apple verarbeitet den Build noch 5–30 Minuten, dann erscheint er in TestFlight."
+            if [ -n "$NOTES" ]; then echo ""; echo "Neu: $NOTES"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Schlüssel entfernen
+        if: always()
+        working-directory: .
+        run: rm -rf "$RUNNER_TEMP/asc"
