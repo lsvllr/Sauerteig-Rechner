@@ -139,3 +139,11 @@ extension BackLauf {
                   weiter: z["weiter"]?.int.map { Swift.min(Swift.max($0, Self.beginn), schritte.count) })
     }
 }
+
+#if DEBUG && canImport(UIKit)
+import SwiftUI
+
+#Preview("Timer · reift") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .reift) }
+#Preview("Timer · Backen läuft") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .backen) }
+#Preview("Seite · Backen läuft") { HauptAnsicht().vorschau(timer: .backen) }
+#endif

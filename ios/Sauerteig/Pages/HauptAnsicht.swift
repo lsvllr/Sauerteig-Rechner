@@ -5,12 +5,14 @@ import SwiftUI
 struct HauptAnsicht: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var db: Datenbank
-    @ObservedObject private var timer = BackTimer.shared
+    @EnvironmentObject private var timer: BackTimer
     @AppStorage("sauerteig-werte") private var gespeichert: Data = Data()
     @State private var w = SauerteigWerte()
     @State private var geladen = false
     @State private var sichernOffen = false
     @State private var timerOffen = false
+    @State private var einstellungenOffen = false
+    @State private var fuetternOffen = false
     @State private var ausgeblendet: Set<String> = []
     @State private var offen: Int = 0
     @State private var abhakenUm: Int?
@@ -24,7 +26,6 @@ struct HauptAnsicht: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         TimerKarte(r: r).id(AppState.Ziel.timer.rawValue)
-                        FuetternKarte().id(AppState.Ziel.fuettern.rawValue)
                         uebersicht(r)
                         mischungKarte
                         teigKarte
@@ -49,9 +50,55 @@ struct HauptAnsicht: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .hhBackground()
-                .navigationTitle("Sauerteig")
+                // Füttern-Popup: hier am Inhalt statt an der ganzen Seite, damit es unter der Navigationsleiste
+                // hängt und Glas und Zahnrad frei bleiben. Es wächst von der Stelle unter dem Glas auf.
+                // Hintergrund und Karte als eigene Einträge, damit jede ihre eigene Einblendung bekommt
+                // (verschachtelt gilt nur die äußere).
+                .overlay(alignment: .top) {
+                    ZStack(alignment: .topLeading) {
+                        if fuetternOffen {
+                            Color.black.opacity(0.35)
+                                .ignoresSafeArea()
+                                .onTapGesture { zeigeFuettern(false) }
+                                .accessibilityLabel("Schließen")
+                                .accessibilityAddTraits(.isButton)
+                                .transition(.opacity)
+                        }
+                        if fuetternOffen {
+                            FuetternKarte(schliessen: { zeigeFuettern(false) })
+                            .frame(maxWidth: 520)
+                            .transition(.scale(scale: 0.08, anchor: Self.glasAnker).combined(with: .opacity))
+                            .padding(.horizontal, Metrics.gutter)
+                            .padding(.top, 2)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                            .zIndex(1)
+                            .accessibilityAddTraits(.isModal)
+                        }
+                    }
+                }
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        // Tageswechsel ohne Datenbankänderung (gelb → rot) auch bei offener App mitnehmen.
+                        TimelineView(.everyMinute) { ctx in
+                            let f = db.fuetterung
+                            Button { zeigeFuettern(!fuetternOffen) } label: { FuetternGlas(stand: f.stand(heute: ctx.date)) }
+                                .accessibilityLabel("Sauerteig füttern")
+                                .accessibilityValue(f.beschreibung(heute: ctx.date))
+                        }
+                    }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button { einstellungenOffen = true } label: { Image(systemName: "gearshape") }
+                            .accessibilityLabel("Einstellungen")
+                    }
+                }
                 .onChange(of: app.ziel) { _, z in
                     guard let z else { return }
+                    if z == .fuettern {
+                        zeigeFuettern(true)
+                        app.ziel = nil
+                        return
+                    }
                     let id = z == .timer && timer.lauf == nil ? "ablauf" : z.rawValue
                     withAnimation(Metrics.move) { proxy.scrollTo(id, anchor: .top) }
                     app.ziel = nil
@@ -73,11 +120,26 @@ struct HauptAnsicht: View {
         .onChange(of: w) { _, v in gespeichert = (try? JSONEncoder().encode(v)) ?? Data() }
         .sheet(isPresented: $sichernOffen) { RezeptSichernBlatt(w: w) }
         .sheet(isPresented: $timerOffen) { TimerStartBlatt(r: r) }
+        .sheet(isPresented: $einstellungenOffen) { EinstellungenBlatt() }
         .sheet(item: Binding(get: { abhakenUm.map { AbhakenZiel(i: $0) } }, set: { abhakenUm = $0?.i })) { z in
             AbhakenUmBlatt(i: z.i, titel: r.schritte.indices.contains(z.i) ? r.schritte[z.i].titel : "") { am in
                 timer.hakeAb(z.i, am: am)
-                offen = z.i + 1
+                oeffne(z.i + 1)
             }
+        }
+    }
+
+    /// Oberkante der Karte unter der Mitte des Glases (rund 24 pt von links bei einer iPhone-Kartenbreite um
+    /// 370 pt): von hier wächst das Popup auf und schrumpft dorthin zurück.
+    private static let glasAnker = UnitPoint(x: 0.065, y: 0)
+
+    /// Füttern-Popup öffnen/schließen (Glas oben links, Mitteilung `/fuettern`). Auf mit leichtem Nachfedern,
+    /// zu ohne, damit es zügig verschwindet.
+    private func zeigeFuettern(_ an: Bool) {
+        guard fuetternOffen != an else { return }
+        if an { Haptics.tap() }
+        withAnimation(an ? .spring(response: 0.38, dampingFraction: 0.74) : .spring(response: 0.26, dampingFraction: 1)) {
+            fuetternOffen = an
         }
     }
 
@@ -229,7 +291,7 @@ struct HauptAnsicht: View {
             Regler(label: "Sauerteig-Temperatur", wert: "\(w.sauerteigTemp) °C", value: $w.sauerteigTemp, range: 18...32, step: 1)
             Regler(label: "Gare-Temperatur", wert: "\(w.gareTemp) °C", value: $w.gareTemp, range: 20...32, step: 1)
             Regler(label: "Ofentemperatur", wert: "\(w.ofenTemp) °C", value: $w.ofenTemp, range: 200...250, step: 5,
-                   hint: "Backen ohne Dampf: \(r.backZeit). Vorheizen und Dampfphase bei \(r.anbackTemp) °C.")
+                   hint: "Backen ohne Dampf: \(r.backZeit). Dampfphase bei \(r.anbackTemp) °C.")
         }
     }
 
@@ -237,7 +299,11 @@ struct HauptAnsicht: View {
 
     private func ablaufKarte(_ r: Berechnung) -> some View {
         let lauf = timer.lauf
-        let passt = lauf.map { l in l.schritte.count == r.schritte.count && zip(l.schritte, r.schritte).allSatisfy { $0.titel == $1.titel } } ?? false
+        // Zahlen im Titel zählen nicht („Ofen auf 250 °C vorheizen“ ändert sich mit der Ofentemperatur).
+        func ohneZahlen(_ t: String) -> String { t.replacingOccurrences(of: "[0-9]+", with: "#", options: .regularExpression) }
+        let passt = lauf.map { l in
+            l.schritte.count == r.schritte.count && zip(l.schritte, r.schritte).allSatisfy { ohneZahlen($0.titel) == ohneZahlen($1.titel) }
+        } ?? false
         let l = passt ? lauf : nil
         let weiter = l?.offenAb ?? 0
         let aktiv: Int? = (l != nil && weiter < (l?.schritte.count ?? 0)) ? weiter : nil
@@ -248,14 +314,14 @@ struct HauptAnsicht: View {
                 VStack(spacing: 0) {
                     ForEach(Array(r.schritte.enumerated()), id: \.offset) { i, s in
                         let erledigt = l != nil && i < weiter
-                        DisclosureGroup(isExpanded: Binding(get: { offen == i }, set: { offen = $0 ? i : -1 })) {
+                        AblaufAbschnitt(offen: offen == i, umschalten: { oeffne(offen == i ? -1 : i) }) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Anleitung(art: s.art, r: r, w: w)
                                 if let l, i >= BackLauf.beginn, i <= weiter {
                                     HStack(spacing: 8) {
                                         Button {
                                             timer.hakeAb(i)
-                                            offen = i + 1
+                                            oeffne(i + 1)
                                         } label: { Label(erledigt ? "Aktualisieren" : "Erledigt", systemImage: "checkmark") }
                                             .buttonStyle(PrimaryButtonStyle(fullWidth: false))
                                         Button { abhakenUm = i } label: { Image(systemName: "clock") }
@@ -267,8 +333,13 @@ struct HauptAnsicht: View {
                                          : "Die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen.")
                                 }
                                 if s.art == .ansetzen {
-                                    Button("Sauerteig angesetzt") { timerOffen = true }
-                                        .buttonStyle(PrimaryButtonStyle(fullWidth: false))
+                                    if let l {
+                                        // Schon angesetzt (laufender Timer zu diesem Rezept): kein zweiter Start von hier.
+                                        Note("Angesetzt um \(BackLauf.uhrzeit(l.start, jetzt: jetzt)). Neu ansetzen geht nach „Beenden“ oben in der Timer-Karte.")
+                                    } else {
+                                        Button("Sauerteig angesetzt") { timerOffen = true }
+                                            .buttonStyle(PrimaryButtonStyle(fullWidth: false))
+                                    }
                                 }
                             }
                             .padding(.vertical, 8)
@@ -304,7 +375,53 @@ struct HauptAnsicht: View {
                 Note("Der laufende Timer gehört zu anderen Einstellungen, daher hier ohne Uhrzeiten.")
             }
         }
-        .onChange(of: aktiv) { _, a in if let a { offen = a } }
+        .onChange(of: aktiv) { _, a in if let a { oeffne(a) } }
+    }
+
+    /// Schritt `i` im Ablauf aufklappen (-1 = alle zu). Ein anderer offener klappt in derselben Animation zu.
+    private func oeffne(_ i: Int) {
+        guard offen != i else { return }
+        withAnimation(Metrics.move) { offen = i }
+    }
+}
+
+/// Aufklappbarer Schritt im Ablauf. Statt DisclosureGroup: Die klappt den Inhalt mit eigener Einblendung auf, dabei
+/// springt der Text kurz hoch und wieder runter. Hier ändert sich nur die Höhe (von oben abgeschnitten), der Inhalt
+/// bleibt oben stehen; zu- und aufklappen laufen so sauber in einer Animation.
+private struct AblaufAbschnitt<Inhalt: View, Kopf: View>: View {
+    let offen: Bool
+    let umschalten: () -> Void
+    @ViewBuilder let inhalt: () -> Inhalt
+    @ViewBuilder let label: () -> Kopf
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Tippgeste statt Button: Ein Button dunkelt den Titel beim Tippen ab und blendet ihn erst nach dem
+            // Loslassen wieder ein, dann hängt der Titel der Klapp-Animation sichtbar hinterher.
+            HStack(alignment: .top, spacing: 8) {
+                label().frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Brand().accent)
+                    .rotationEffect(.degrees(offen ? 90 : 0))
+                    .padding(.top, 3)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: umschalten)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { umschalten() }
+            .accessibilityValue(offen ? "geöffnet" : "geschlossen")
+            .accessibilityHint(offen ? "Zum Zuklappen doppeltippen" : "Zum Aufklappen doppeltippen")
+            inhalt()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(height: offen ? nil : 0, alignment: .top)
+                .clipped()
+                .opacity(offen ? 1 : 0)
+                .allowsHitTesting(offen)
+                .accessibilityHidden(!offen)
+        }
     }
 }
 
@@ -348,3 +465,24 @@ private struct RezeptSichernBlatt: View {
         .presentationDetents([.height(260)])
     }
 }
+
+#if DEBUG
+#Preview("Blatt · Rezept sichern") {
+    Color.clear.sheet(isPresented: .constant(true)) { RezeptSichernBlatt(w: Vorschau.werte) }.vorschau()
+}
+
+// MARK: - Ganze Seite
+
+#Preview("Seite · ohne Timer") { HauptAnsicht().vorschau(rezepte: true) }
+#Preview("Seite · Sauerteig reift") { HauptAnsicht().vorschau(timer: .reift) }
+#Preview("Seite · Backen läuft") { HauptAnsicht().vorschau(timer: .backen) }
+#Preview("Seite · Fertig gebacken") { HauptAnsicht().vorschau(timer: .fertig) }
+#Preview("Seite · Hinweis") {
+    HauptAnsicht().vorschau(toast: AppState.Toast(text: "Rezept gesichert", art: .erfolg))
+}
+#Preview("Seite · Rückgängig") {
+    HauptAnsicht().vorschau(toast: AppState.Toast(text: "Rezept gelöscht", art: .info, rueckgaengig: {}))
+}
+#Preview("Seite · Füttern überfällig") { HauptAnsicht().vorschau(fuettern: .ueberfaellig) }
+#Preview("Seite · dunkel") { HauptAnsicht().vorschau(timer: .backen).preferredColorScheme(.dark) }
+#endif

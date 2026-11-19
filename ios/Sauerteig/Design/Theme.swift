@@ -114,3 +114,20 @@ enum Metrics {
     static let exit = Animation.timingCurve(0.4, 0, 1, 1, duration: tOut)
     static let move = Animation.timingCurve(0.4, 0, 0.2, 1, duration: tSlide)
 }
+
+#if DEBUG
+#Preview("Farben") {
+    let farben: [(String, Color)] = [
+        ("hhBg", .hhBg), ("hhCard", .hhCard), ("hhFill", .hhFill), ("hhInk", .hhInk), ("hhMuted", .hhMuted),
+        ("hhLine", .hhLine), ("hhPos", .hhPos), ("hhNeg", .hhNeg), ("hhWarn", .hhWarn), ("hhInfo", .hhInfo),
+        ("hhToastBg", .hhToastBg), ("Akzent", Brand().accent), ("Primär", Brand().primary),
+    ]
+    List(farben, id: \.0) { name, c in
+        HStack {
+            RoundedRectangle(cornerRadius: 6).fill(c).frame(width: 44, height: 28)
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.hhLine))
+            Text(name).font(.body.monospaced())
+        }
+    }
+}
+#endif

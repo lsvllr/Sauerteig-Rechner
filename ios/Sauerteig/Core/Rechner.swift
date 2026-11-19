@@ -82,13 +82,14 @@ enum SauerteigDaten {
         "Klopftest: Fertiges Brot klingt hohl",
         "Nach dem Backen mindestens 2h auskühlen lassen",
         "Je höher der Roggen-Anteil, desto kompakter das Brot",
+        "Warmer Ort für die Gare: Backofen mit eingeschalteter Lampe hat ca. 30 °C",
     ]
 }
 
 /// JavaScripts Math.round (halbe Werte zu +∞).
 @inline(__always) func jsRound(_ x: Double) -> Int { Int((x + 0.5).rounded(.down)) }
 
-enum SchrittArt: String, Codable, Sendable { case ansetzen, autolyse, mischen, formen, ofen, backen, auskuehlen }
+enum SchrittArt: String, Codable, Sendable { case ansetzen, autolyse, mischen, gare, formen, ofen, backen, auskuehlen }
 
 struct Schritt: Hashable, Sendable {
     var t: Int // Minuten ab T
@@ -118,7 +119,6 @@ struct Berechnung: Sendable {
     var gesamtMehl: Int
     var mehl: Anteile
     var hauptteigWasser, salz: Int
-    var kuemmel: String
     var teiggewicht: Int
     var einzelGewicht: Double
     var hydration: Int
@@ -134,6 +134,8 @@ struct Berechnung: Sendable {
 }
 
 enum Rechner {
+    /// Hauptteig mischen und kneten, danach beginnt die erste Gare.
+    static let hauptteigDauer = "10 Min"
     static func optimaleHydration(_ a: Anteile) -> Int {
         jsRound(Double(a.roggen * 75 + a.dinkel * 78 + a.weizen * 72 + a.buchweizen * 85) / 100)
     }
@@ -220,7 +222,6 @@ enum Rechner {
         let wasserZiel = jsRound(Double(mehlGesamt * e.hydration) / 100)
         let hauptWasser = max(0, wasserZiel - sWasser)
         let salz = jsRound(14 * skal)
-        let kuemmel = String(format: "%.1f", 1.5 * skal)
         let teig = jsRound(Double(sGesamt + gesamtMehl + hauptWasser + salz))
         let hyd = jsRound(Double(sWasser + hauptWasser) / Double(mehlGesamt) * 100)
         let zp = zeitplan(e.sauerteigTemp)
@@ -243,7 +244,8 @@ enum Rechner {
 
         let bz = spanne(backZeit) ?? (0, 0)
         let tMischen = mitte(spanne(zp.sauerteigZeit) ?? (0, 0))
-        let tFormen = tMischen + mitte(spanne(ersteGare) ?? (0, 0))
+        let tGare = tMischen + mitte(spanne(Self.hauptteigDauer) ?? (0, 0))
+        let tFormen = tGare + mitte(spanne(ersteGare) ?? (0, 0))
         let tBacken = tFormen + mitte((sgMin, sgMax))
         let tOfen = max(tFormen, tBacken - 35)
         let tAus = tBacken + dampf + mitte(bz)
@@ -251,15 +253,16 @@ enum Rechner {
         if mitAutolyse {
             s.append(Schritt(t: tMischen - mitte(spanne(autolyse) ?? (0, 0)), titel: "Autolyse ansetzen (vor Sauerteig-Reife)", dauer: autolyse, art: .autolyse))
         }
-        let zugeben = (mehl.roggen > 0 ? "Roggenmehl, " : "") + "Sauerteig + Salz zugeben, erste Gare"
-        s.append(Schritt(t: tMischen, titel: mitAutolyse ? zugeben : "Hauptteig mischen, erste Gare", dauer: ersteGare, art: .mischen))
+        // Was genau dazukommt (Roggen erst nach der Autolyse), steht in der Anleitung des Schritts.
+        s.append(Schritt(t: tMischen, titel: "Hauptteig", dauer: Self.hauptteigDauer, art: .mischen))
+        s.append(Schritt(t: tGare, titel: "Erste Gare", dauer: ersteGare, art: .gare))
         s.append(Schritt(t: tFormen, titel: "Formen, Stückgare", dauer: stueckgare, art: .formen))
-        s.append(Schritt(t: tOfen, titel: "Ofen auf \(anback) °C vorheizen", dauer: "30-40 Min", art: .ofen))
+        s.append(Schritt(t: tOfen, titel: "Ofen auf \(ofen) °C vorheizen", dauer: "30-40 Min", art: .ofen))
         s.append(Schritt(t: tBacken, titel: "Backen", dauer: "\(bz.0 + dampf)-\(bz.1 + dampf) Min", art: .backen))
         s.append(Schritt(t: tAus, titel: "Auskühlen", dauer: "min. 2h", art: .auskuehlen))
         let (krume, geschmack, haltbarkeit) = eigenschaften(a)
         return Berechnung(anstellgut: e.anstellgut, sauerteigMehl: sMehl, sauerteigWasser: sWasser, sauerteigGesamt: sGesamt,
-                          gesamtMehl: gesamtMehl, mehl: mehl, hauptteigWasser: hauptWasser, salz: salz, kuemmel: kuemmel,
+                          gesamtMehl: gesamtMehl, mehl: mehl, hauptteigWasser: hauptWasser, salz: salz,
                           teiggewicht: teig, einzelGewicht: einzel, hydration: hyd, zeitplan: zp, ersteGare: ersteGare,
                           stueckgare: stueckgare, backZeit: backZeit, dampfMin: dampf, ofenTemp: ofen, anbackTemp: anback,
                           autolyseZeit: autolyse, mitAutolyse: mitAutolyse, tempHinweis: hinweis,
@@ -319,3 +322,19 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
         ofenTemp = n("ofenTemp", d.ofenTemp)
     }
 }
+
+#if DEBUG && canImport(UIKit)
+import SwiftUI
+
+#Preview("Rechner") { HauptAnsicht().vorschau() }
+#Preview("Anleitungen") {
+    let r = Vorschau.rezept
+    List(Array(r.schritte.enumerated()), id: \.offset) { _, s in
+        VStack(alignment: .leading, spacing: 6) {
+            Text(s.titel).font(.headline)
+            Text("T+\(Rechner.hm(s.t)) · \(s.dauer)").font(.caption).foregroundStyle(.secondary)
+            Anleitung(art: s.art, r: r, w: Vorschau.werte)
+        }
+    }
+}
+#endif

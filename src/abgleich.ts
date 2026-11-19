@@ -1,145 +1,182 @@
-// Back-Timer zwischen den Geräten des Kontos abgleichen. Jede Änderung (Ansetzen, Abhaken, Vorwarnung, Beenden) geht
-// mit ihrem Zeitpunkt an den Server (/api/timer/stand); beim Öffnen, bei jeder Rückkehr auf die Seite und alle
-// 30 Sekunden holt die Seite den Stand des Kontos (/api/timer). Es gilt der neueste Stand. Was offline geändert
-// wurde, geht beim nächsten Abgleich nach. Ab „Backen beginnen“ pusht der Server aus diesem Stand (server.ts).
-import { beendeLauf, starteLauf, timerStore, type Lauf } from './gemeinsam/timer';
-import { alsLauf, kern, kernText } from './laufKern';
-import { post, rufe, type Antwort } from './api';
+// Abgleich der lokalen Datenbank (datenbank.ts) zwischen den Geräten eines Kontos, über den Server als Relais
+// (server/server.ts, /api/sync/*). Gleiches Protokoll wie die iOS-App (ios/Sauerteig/App/Abgleich.swift).
+//
+// - Ohne Konto oder mit nur einem Gerät im Konto liegt nichts am Server; „ausstehend“ wird dann verworfen, weil beim
+//   Einstieg in einen Abgleich ohnehin alles gesendet wird.
+// - Ab zwei Geräten: holen (seitenweise ab dem eigenen Stand), dann einmal alles senden (Schnappschuss, je
+//   Kennung), danach nur noch die ausstehenden Änderungen.
+// - Neue Kennung (das Konto war zwischendurch nur ein Gerät, der Server hat geleert): von vorn.
+// - Ende-zu-Ende verschlüsselt (schluessel.ts): Der Server sieht nur Tabelle, uid und Zeit. Ein Gerät ohne oder
+//   mit falschem Schlüssel bekommt nichts und muss ihn mit einem Gerätecode eines anderen Geräts holen.
+// Angestoßen beim Öffnen, sobald der Server „neu“ meldet (Server-Sent Events, /api/sync/live), bei jeder Rückkehr
+// auf die Seite, kurz nach jeder eigenen Änderung und zur Sicherheit jede Minute.
+import { db, type Aenderung } from './datenbank';
+import { post, rufe } from './api';
+import { entschluessele, leseSchluessel, merkeSchluessel, neuerSchluessel, schluesselId, verschluessele } from './schluessel';
 
-const KEY = 'sauerteig-timer-abgleich';
-const TAKT = 30_000;
+const KEY = 'sauerteig-abgleich';
+const TAKT = 60_000;
+const SEITE = 500;
 
 interface Zustand {
-    /** Zeitpunkt der letzten Änderung des Timers auf diesem Gerät oder des übernommenen Stands */
-    geaendert: number;
-    /** Änderung noch nicht beim Server */
-    offen: boolean;
+    kennung: string;
+    /** Bis hier geholt und übernommen */
+    ab: number;
+    /** Für diese Kennung wurde schon alles gesendet */
+    gesendet: string;
+    geraete: number;
 }
+
+const leer = (): Zustand => ({ kennung: '', ab: 0, gesendet: '', geraete: 0 });
 
 function lade(): Zustand {
     try {
         const z = JSON.parse(localStorage.getItem(KEY) || 'null') as Zustand | null;
-        if (z && typeof z.geaendert === 'number') return { geaendert: z.geaendert, offen: !!z.offen };
+        if (z && typeof z.kennung === 'string' && typeof z.ab === 'number') return { ...leer(), ...z };
     } catch {
-        /* neu anfangen */
+        /* neu */
     }
-    // Timer von vor dem Abgleich: gilt als Änderung von damals
-    const l = timerStore.lauf();
-    return l ? { geaendert: l.erstellt, offen: true } : { geaendert: 0, offen: false };
+    return leer();
 }
 
-let z: Zustand = typeof window === 'undefined' ? { geaendert: 0, offen: false } : lade();
-let bekannt = kernText(timerStore.lauf());
-let uebernehmen = false;
+let z = typeof window === 'undefined' ? leer() : lade();
 let aktiv = false;
-let reihe: Promise<unknown> = Promise.resolve();
+let laeuft = false;
+let nochmal = false;
 let ticker: ReturnType<typeof setInterval> | null = null;
+let quelle: EventSource | null = null;
+/** Das Konto hat einen Schlüssel, dieses Gerät nicht (oder einen anderen). */
+let schluesselFehlt = false;
+let verzoegert: ReturnType<typeof setTimeout> | null = null;
+let abgemeldet: () => void = () => undefined;
+const hoerer = new Set<() => void>();
+
+function setzeSchluesselFehlt(f: boolean): void {
+    if (f === schluesselFehlt) return;
+    schluesselFehlt = f;
+    hoerer.forEach((h) => h());
+}
 
 function merke(neu: Zustand): void {
+    const geraeteAnders = neu.geraete !== z.geraete;
     z = neu;
     try {
         localStorage.setItem(KEY, JSON.stringify(z));
     } catch {
-        /* dann nur bis zum Neuladen */
+        /* nur bis zum Neuladen */
     }
+    if (geraeteAnders) hoerer.forEach((f) => f());
 }
 
-/** Zeitpunkt des aktuellen Stands auf diesem Gerät */
-export const geaendert = (): number => z.geaendert;
-
-/** Stand von außen setzen (Server oder Haushalt-App), ohne ihn als eigene Änderung zu zählen. ``offen``: noch an
- * den Server schicken (aus der App übernommen). */
-export function uebernimm(l: Lauf | null, wann: number, offen: boolean): void {
-    uebernehmen = true;
-    try {
-        if (l) starteLauf(l); // Vergangenes gilt dabei als gemeldet
-        else beendeLauf();
-    } finally {
-        uebernehmen = false;
-    }
-    bekannt = kernText(timerStore.lauf());
-    merke({ geaendert: wann, offen });
-    if (offen) void sende();
+/** Geräte im Konto beim letzten Abgleich (0 = noch nicht bekannt). */
+export const geraete = () => z.geraete;
+export const fehltSchluessel = () => schluesselFehlt;
+export function abonniereGeraete(f: () => void): () => void {
+    hoerer.add(f);
+    return () => hoerer.delete(f);
 }
 
-/** Antwort des Servers: ist sein Stand neuer, übernehmen. */
-function verarbeite(r: Antwort): void {
-    const g = Number(r.geaendert);
-    if (!Number.isFinite(g) || g <= z.geaendert || z.offen) return;
-    const l = alsLauf(r.lauf ?? null);
-    if (l === undefined) return;
-    if (kernText(l) === kernText(timerStore.lauf())) merke({ geaendert: g, offen: false });
-    else uebernimm(l, g, false);
-}
-
-function sende(): Promise<unknown> {
-    reihe = reihe.then(async () => {
-        if (!aktiv || !z.offen) return;
-        const g = z.geaendert;
-        try {
-            const r = await post('/api/timer/stand', { lauf: kern(timerStore.lauf()), geaendert: g });
-            if (!r.ok) return;
-            if (z.geaendert === g) merke({ geaendert: g, offen: false });
-            verarbeite(r);
-        } catch {
-            /* offline: beim nächsten Abgleich */
+async function einmal(): Promise<void> {
+    let k = leseSchluessel();
+    const id = k ? await schluesselId(k) : '';
+    // Holen bis zum Ende
+    for (;;) {
+        const r = await rufe(`/api/sync/holen?kennung=${encodeURIComponent(z.kennung)}&ab=${z.ab}&schluessel=${id}`);
+        if (r.status === 401) return abgemeldet();
+        if (!r.ok) return;
+        if (r.schluessel !== true) {
+            // Konto ohne Schlüssel (älteres Konto): dieses Gerät erzeugt ihn und legt ihn beim nächsten Holen fest
+            if (!k && r.schluesselDa !== true) {
+                merkeSchluessel(neuerSchluessel());
+                nochmal = true;
+            } else setzeSchluesselFehlt(true);
+            merke({ ...z, geraete: Number(r.geraete) || 0 });
+            return;
         }
-    });
-    return reihe;
-}
-
-async function hole(): Promise<void> {
-    if (!aktiv || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) return;
-    if (z.offen) {
-        await sende(); // eigene Änderung zuerst; ist der Server neuer, kommt sein Stand mit der Antwort
+        setzeSchluesselFehlt(false);
+        const kennung = String(r.kennung);
+        const neueKennung = kennung !== z.kennung;
+        const fremd = await Promise.all(((r.aenderungen as Aenderung[]) ?? []).map((a) => entschluessele(k!, a)));
+        db.wende(fremd.filter((a): a is Aenderung => !!a));
+        merke({ ...z, kennung, ab: Number(r.bis) || 0, geraete: Number(r.geraete) || 0, gesendet: neueKennung ? '' : z.gesendet });
+        if (!r.mehr) break;
+    }
+    // Allein im Konto: nichts senden, nichts aufheben
+    if (z.geraete < 2) {
+        const aus = db.ausstehend();
+        if (aus.length) db.quittiere(new Set(aus.map((a) => a.zeit)));
         return;
     }
+    const alles = z.gesendet !== z.kennung;
+    const aus = db.ausstehend();
+    const liste = alles ? db.schnappschuss() : aus;
+    k = k!;
+    for (let i = 0; i < liste.length || (alles && i === 0); i += SEITE) {
+        const teil = liste.slice(i, i + SEITE);
+        const geheim = await Promise.all(teil.map((a) => verschluessele(k!, a)));
+        const r = await post('/api/sync/senden', { kennung: z.kennung, schluessel: id, aenderungen: geheim });
+        if (r.status === 401) return abgemeldet();
+        if (!r.ok || r.angenommen !== true) return; // Kennung neu oder allein: beim nächsten Mal von vorn
+        db.quittiere(new Set((alles ? aus : teil).map((a) => a.zeit)));
+    }
+    if (alles) merke({ ...z, gesendet: z.kennung });
+}
+
+/** Jetzt abgleichen (läuft schon einer: danach noch einmal). */
+export async function gleicheAb(): Promise<void> {
+    if (!aktiv) return;
+    if (laeuft) {
+        nochmal = true;
+        return;
+    }
+    laeuft = true;
     try {
-        const r = await rufe('/api/timer');
-        if (r.ok) verarbeite(r);
+        do {
+            nochmal = false;
+            await einmal();
+        } while (nochmal && aktiv);
     } catch {
-        /* offline */
+        /* offline: beim nächsten Anstoß */
+    } finally {
+        laeuft = false;
     }
 }
 
-/** Ist der aktuelle Stand beim Server? (Dann pusht er ab „Backen beginnen“.) */
-export async function synchron(): Promise<boolean> {
-    await sende();
-    return aktiv && !z.offen;
-}
+const sichtbar = () => {
+    if (document.visibilityState === 'visible') void gleicheAb();
+};
 
-if (typeof window !== 'undefined') {
-    timerStore.abonniere(() => {
-        const s = kernText(timerStore.lauf());
-        if (s === bekannt) return; // nur Meldungen geändert
-        bekannt = s;
-        if (uebernehmen) return;
-        merke({ geaendert: Math.max(Date.now(), z.geaendert + 1), offen: true });
-        void sende();
-    });
-    // Anderer Tab hat geändert oder abgeglichen
-    window.addEventListener('storage', (e) => {
-        if (e.key === KEY) z = lade();
-        if (e.key === KEY || e.key === 'sauerteig-timer') bekannt = kernText(timerStore.lauf());
-    });
-}
-
-const sichtbar = () => void hole();
-
-/** Angemeldet: abgleichen. */
-export function starteAbgleich(): void {
+/** Angemeldet: abgleichen. ``beiAbmeldung``: der Server kennt die Sitzung nicht mehr (Konto gelöscht). */
+export function starteAbgleich(beiAbmeldung: () => void): void {
+    abgemeldet = beiAbmeldung;
     if (aktiv) return;
     aktiv = true;
-    void hole();
+    void gleicheAb();
     document.addEventListener('visibilitychange', sichtbar);
     ticker = setInterval(sichtbar, TAKT);
+    // Der Browser verbindet von selbst neu (retry vom Server)
+    if (typeof EventSource !== 'undefined') {
+        quelle = new EventSource('/api/sync/live');
+        quelle.addEventListener('neu', () => void gleicheAb());
+    }
 }
 
-/** Abgemeldet: Timer nur auf diesem Gerät beenden, das Konto behält ihn. */
+// Kurz nach einer eigenen Änderung senden (mehrere schnell hintereinander zusammen)
+if (typeof window !== 'undefined')
+    db.abonniere((fremd) => {
+        if (fremd || !aktiv) return;
+        if (verzoegert) clearTimeout(verzoegert);
+        verzoegert = setTimeout(() => void gleicheAb(), 1500);
+    });
+
+/** Abgemeldet: Daten bleiben auf diesem Gerät, der Stand des Abgleichs ist vergessen. */
 export function trenneAbgleich(): void {
     aktiv = false;
     document.removeEventListener('visibilitychange', sichtbar);
     if (ticker) clearInterval(ticker);
     ticker = null;
-    uebernimm(null, 0, false);
+    quelle?.close();
+    quelle = null;
+    merke(leer());
+    setzeSchluesselFehlt(false);
 }

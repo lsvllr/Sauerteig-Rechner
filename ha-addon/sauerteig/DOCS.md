@@ -1,14 +1,20 @@
 # Sauerteig-Rechner
 
-Node-Server: liefert die App aus, verwaltet Konten und Rezepte und schickt die Erinnerungen des Back-Timers per
-Web-Push an alle Geräte eines Kontos.
+Node-Server: liefert die App aus, verwaltet Konten, gleicht die Daten zwischen den Geräten eines Kontos ab und
+schickt die Erinnerungen des Back-Timers per Web-Push an alle Geräte eines Kontos.
+
+Web-App und iOS-App laufen ohne Server und ohne Konto, die Daten liegen auf dem Gerät. Der Server ist nur Relais:
+Rezepte, Füttern und Back-Timer liegen bei ihm nur, solange ein Konto mindestens zwei Geräte hat, und nur
+Ende-zu-Ende verschlüsselt (er kann sie nicht lesen). Neues meldet er den anderen Geräten sofort, der iOS-App
+per stillem Push über dieselben APNs-Einstellungen wie der Weckdienst. Wird es wieder
+eins (Gerät getrennt, ein halbes Jahr nicht gesehen), löscht er sie.
 
 ## Konten
 
-Ein Konto entsteht nur mit einem Einladungscode. Codes erzeugst du unter `https://sauerteig.vollrath.app/admin`
+Ein Konto braucht es nur, um Geräte zu verknüpfen. Es entsteht nur mit einem Einladungscode. Codes erzeugst du unter `https://sauerteig.vollrath.app/admin`
 (Passwort = **admin_password**). Jeder Code gilt 14 Tage und ergibt genau ein Konto, den Namen wählt die
 eingeladene Person selbst. Es gibt kein Passwort: Ein Gerät bleibt angemeldet. Weitere Geräte meldet man mit einem
-Gerätecode an (15 Minuten gültig). Den erzeugt die App unter „Konto → Weiteres Gerät anmelden“, im Notfall auch
+Gerätecode an (15 Minuten gültig). Den erzeugt die App unter „Einstellungen → Geräte verknüpfen → Weiteres Gerät verknüpfen“, im Notfall auch
 der Admin für ein Konto.
 
 ## Einstellungen
@@ -29,7 +35,8 @@ Nach dem Ändern speichern und das Add-on neu starten.
 
 ## Daten
 
-`/data/sauerteig.db` (SQLite: Konten, Rezepte, Push-Abos, laufende Back-Timer, Weckdienst: nur Push-Token und
+`/data/sauerteig.db` (SQLite: Konten, Sitzungen, Push-Abos, Zeitplan laufender Back-Timer für den Push, Abgleich
+nur bei Konten mit mindestens zwei Geräten, Weckdienst: nur Push-Token und
 Uhrzeiten der Live-Aktivitäten) und `/data/vapid.json`. Beide
 sind in den HA-Backups enthalten. Während eines Backups stoppt das Add-on kurz.
 

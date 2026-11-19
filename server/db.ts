@@ -1,6 +1,11 @@
 // Datenbank des Sauerteig-Rechners (SQLite, in Node eingebaut). Liegt in DATA_DIR (Add-on: /data, in den
 // HA-Backups), lokal in ./data.
 //
+// Die Daten der Nutzer (Rezepte, Füttern, Back-Timer) liegen auf den Geräten. Der Server speichert nur, was er
+// braucht: Konten, Sitzungen, Codes, Push-Abos und den Zeitplan für Push/Weckdienst. Rezepte usw. kommen nur in
+// den Abgleich (Tabelle `abgleich`), solange ein Konto mindestens zwei Geräte hat; fällt es auf eins zurück, ist
+// alles davon wieder weg.
+//
 // Konten entstehen nur über einen Einladungscode des Admins (ein Code = ein Konto). Ohne Passwort: ein Gerät ist
 // über ein Sitzungs-Cookie angemeldet; weitere Geräte kommen über einen kurzlebigen Gerätecode dazu, den das
 // Konto selbst oder der Admin erzeugt. Codes und Sitzungen stehen nur als SHA-256 in der Datenbank.
@@ -43,15 +48,6 @@ db.exec(`
     zuletzt INTEGER NOT NULL,
     geraet TEXT NOT NULL DEFAULT ''
   );
-  CREATE TABLE IF NOT EXISTS rezepte (
-    id INTEGER PRIMARY KEY,
-    konto_id INTEGER NOT NULL REFERENCES konten(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    datum TEXT NOT NULL,
-    einstellungen TEXT NOT NULL,
-    erstellt INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS rezepte_konto ON rezepte(konto_id);
   CREATE TABLE IF NOT EXISTS push_abos (
     endpoint TEXT PRIMARY KEY,
     konto_id INTEGER NOT NULL REFERENCES konten(id) ON DELETE CASCADE,
@@ -63,12 +59,6 @@ db.exec(`
     konto_id INTEGER PRIMARY KEY REFERENCES konten(id) ON DELETE CASCADE,
     lauf TEXT NOT NULL
   );
-  -- Back-Timer, wie die Geräte des Kontos ihn zeigen (auch Reifezeit; NULL = beendet), mit Zeitpunkt der Änderung
-  CREATE TABLE IF NOT EXISTS timer_staende (
-    konto_id INTEGER PRIMARY KEY REFERENCES konten(id) ON DELETE CASCADE,
-    lauf TEXT,
-    geaendert INTEGER NOT NULL
-  );
   -- Weckdienst der iOS-App: Push-Token einer Live-Aktivität, Zeiten der Back-Schritte (JSON, ms), zuletzt
   -- gemeldeter Schritt. Kein Konto, keine Rezeptdaten (server/wecker.ts).
   CREATE TABLE IF NOT EXISTS wecker (
@@ -77,7 +67,37 @@ db.exec(`
     gesendet INTEGER NOT NULL,
     erstellt INTEGER NOT NULL
   );
+  -- Abgleich zwischen den Geräten eines Kontos (nur ab zwei Geräten): Änderungen {tabelle, uid, daten, geloescht,
+  -- zeit} wie auf den Geräten, nr wächst nur (auch nach Löschen). Kennung je Konto: neu, wenn geleert.
+  CREATE TABLE IF NOT EXISTS abgleich (
+    nr INTEGER PRIMARY KEY AUTOINCREMENT,
+    konto_id INTEGER NOT NULL REFERENCES konten(id) ON DELETE CASCADE,
+    tabelle TEXT NOT NULL,
+    uid TEXT NOT NULL,
+    zeit TEXT NOT NULL,
+    daten TEXT NOT NULL,
+    geloescht INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS abgleich_konto ON abgleich(konto_id, nr);
+  CREATE UNIQUE INDEX IF NOT EXISTS abgleich_zeile ON abgleich(konto_id, tabelle, uid, zeit);
+  CREATE TABLE IF NOT EXISTS abgleich_kennung (
+    konto_id INTEGER PRIMARY KEY REFERENCES konten(id) ON DELETE CASCADE,
+    kennung TEXT NOT NULL
+  );
 `);
+
+/** Spalten, die später dazukamen. */
+function spalte(tabelle: string, name: string, typ: string): void {
+  const da = (db.prepare(`PRAGMA table_info(${tabelle})`).all() as { name: string }[]).some((c) => c.name === name);
+  if (!da) db.exec(`ALTER TABLE ${tabelle} ADD COLUMN ${name} ${typ}`);
+}
+// Kennung des Schlüssels, mit dem die Geräte des Kontos verschlüsseln (SHA-256 des Schlüssels, gekürzt). Der
+// Schlüssel selbst kommt nie an den Server.
+spalte('abgleich_kennung', 'schluessel', 'TEXT');
+// Gerätecode: Schlüssel des Kontos, verpackt mit dem geheimen Teil des Codes, den der Server nie sieht.
+spalte('geraetecodes', 'schluessel', 'TEXT');
+// Push-Token der iOS-App für den stillen Push „es gibt Neues“ (apns:<hex>).
+spalte('sitzungen', 'push', 'TEXT');
 
 /** Beim Beenden: WAL zurückschreiben, damit die Sicherung nur sauerteig.db braucht. */
 export function schliesse(): void {
@@ -135,7 +155,7 @@ export interface Konto {
 export function neueSitzung(kontoId: number, geraet: string): string {
   const token = randomBytes(32).toString('base64url');
   const jetzt = Date.now();
-  tue('INSERT INTO sitzungen VALUES (?, ?, ?, ?, ?)', hash(token), kontoId, jetzt, jetzt, geraet.slice(0, 120));
+  tue('INSERT INTO sitzungen (token_hash, konto_id, erstellt, zuletzt, geraet) VALUES (?, ?, ?, ?, ?)', hash(token), kontoId, jetzt, jetzt, geraet.slice(0, 120));
   return token;
 }
 
@@ -151,8 +171,22 @@ export function kontoZuSitzung(token: string): Konto | null {
   return { id: k.id, name: k.name };
 }
 
+/** Gerät abmelden. Bleibt danach nur ein Gerät, braucht das Konto keinen Abgleich mehr. */
 export function beendeSitzung(token: string): void {
+  const s = eine<{ konto_id: number }>('SELECT konto_id FROM sitzungen WHERE token_hash = ?', hash(token));
   tue('DELETE FROM sitzungen WHERE token_hash = ?', hash(token));
+  if (s && geraete(s.konto_id) < 2) leereAbgleich(s.konto_id);
+}
+
+/** Sitzungen, die ein halbes Jahr nicht mehr kamen (Gerät weg, App gelöscht), zählen nicht mehr als Gerät. */
+export function raeumeSitzungenAuf(jetzt = Date.now()): void {
+  const alt = alle<{ konto_id: number }>('SELECT DISTINCT konto_id FROM sitzungen WHERE zuletzt < ?', jetzt - 180 * TAG);
+  tue('DELETE FROM sitzungen WHERE zuletzt < ?', jetzt - 180 * TAG);
+  for (const { konto_id } of alt) if (geraete(konto_id) < 2) leereAbgleich(konto_id);
+}
+
+export function geraete(kontoId: number): number {
+  return eine<{ n: number }>('SELECT COUNT(*) AS n FROM sitzungen WHERE konto_id = ?', kontoId)!.n;
 }
 
 export type Ergebnis<T> = { ok: true; wert: T } | { ok: false; fehler: string };
@@ -170,64 +204,182 @@ export function registriere(codeEingabe: string, name: string): Ergebnis<Konto> 
   });
 }
 
-/** Gerätecode einlösen (einmalig). */
-export function loeseGeraetecode(codeEingabe: string): Konto | null {
+/** Gerätecode einlösen (einmalig). `nurKonto`: nur für dieses Konto (Schlüssel holen auf einem angemeldeten Gerät). */
+export function loeseGeraetecode(codeEingabe: string, nurKonto?: number): (Konto & { schluessel: string | null }) | null {
   const h = hash(normiereCode(codeEingabe));
   return inTransaktion(() => {
-    const k = eine<Konto & { gueltig_bis: number }>(
-      'SELECT k.id, k.name, g.gueltig_bis FROM geraetecodes g JOIN konten k ON k.id = g.konto_id WHERE g.code_hash = ?',
+    const k = eine<Konto & { gueltig_bis: number; schluessel: string | null }>(
+      'SELECT k.id, k.name, g.gueltig_bis, g.schluessel FROM geraetecodes g JOIN konten k ON k.id = g.konto_id WHERE g.code_hash = ?',
       h,
     );
+    if (!k || (nurKonto !== undefined && k.id !== nurKonto)) return null;
     tue('DELETE FROM geraetecodes WHERE code_hash = ?', h);
-    return k && k.gueltig_bis >= Date.now() ? { id: k.id, name: k.name } : null;
+    return k.gueltig_bis >= Date.now() ? { id: k.id, name: k.name, schluessel: k.schluessel } : null;
   });
 }
 
-export function neuerGeraetecode(kontoId: number): { code: string; gueltigBis: number } {
+export function neuerGeraetecode(kontoId: number, schluessel: string | null = null): { code: string; gueltigBis: number } {
   const c = code(8);
   const gueltigBis = Date.now() + GERAETECODE_GUELTIG;
   tue('DELETE FROM geraetecodes WHERE gueltig_bis < ?', Date.now());
-  tue('INSERT INTO geraetecodes VALUES (?, ?, ?)', hash(c), kontoId, gueltigBis);
+  tue('INSERT INTO geraetecodes (code_hash, konto_id, gueltig_bis, schluessel) VALUES (?, ?, ?, ?)', hash(c), kontoId, gueltigBis, schluessel);
   return { code: c, gueltigBis };
 }
 
-/* ----------------------------------------------------------------- Rezepte */
+/* -------------------------------------------------- stiller Push (iOS-App) */
 
-export interface RezeptZeile {
-  id: number;
-  name: string;
-  datum: string;
-  einstellungen: Record<string, unknown>;
+export function setzePush(token: string, push: string | null): void {
+  tue('UPDATE sitzungen SET push = NULL WHERE push = ?', push);
+  tue('UPDATE sitzungen SET push = ? WHERE token_hash = ?', push, hash(token));
 }
 
-export const MAX_REZEPTE = 500;
-
-export function rezepte(kontoId: number): RezeptZeile[] {
-  return alle<{ id: number; name: string; datum: string; einstellungen: string }>(
-    'SELECT id, name, datum, einstellungen FROM rezepte WHERE konto_id = ? ORDER BY erstellt, id',
+/** Push-Ziele der anderen Geräte des Kontos. */
+export function pushZiele(kontoId: number, ausserToken: string): string[] {
+  return alle<{ push: string }>(
+    'SELECT push FROM sitzungen WHERE konto_id = ? AND token_hash != ? AND push IS NOT NULL',
     kontoId,
-  ).map((r) => ({ ...r, einstellungen: JSON.parse(r.einstellungen) }));
+    hash(ausserToken),
+  ).map((z) => z.push);
 }
 
-export function anzahlRezepte(kontoId: number): number {
-  return eine<{ n: number }>('SELECT COUNT(*) AS n FROM rezepte WHERE konto_id = ?', kontoId)!.n;
+export function vergissPushZiel(push: string): void {
+  tue('UPDATE sitzungen SET push = NULL WHERE push = ?', push);
 }
 
-export function fuegeRezeptHinzu(kontoId: number, r: Omit<RezeptZeile, 'id'>): number {
-  const z = tue(
-    'INSERT INTO rezepte (konto_id, name, datum, einstellungen, erstellt) VALUES (?, ?, ?, ?, ?)',
+/* ---------------------------------------------------------------- Abgleich */
+
+export interface Aenderung {
+  tabelle: string;
+  uid: string;
+  daten: Record<string, unknown>;
+  geloescht: boolean;
+  zeit: string;
+}
+
+export const MAX_ABGLEICH = 20_000;
+
+export function kennung(kontoId: number): string {
+  const k = eine<{ kennung: string }>('SELECT kennung FROM abgleich_kennung WHERE konto_id = ?', kontoId);
+  if (k) return k.kennung;
+  const neu = randomBytes(9).toString('base64url');
+  tue('INSERT INTO abgleich_kennung (konto_id, kennung) VALUES (?, ?)', kontoId, neu);
+  return neu;
+}
+
+/** Kennung des Schlüssels; null, solange kein Gerät einen angemeldet hat. */
+export function schluesselId(kontoId: number): string | null {
+  kennung(kontoId);
+  return eine<{ schluessel: string | null }>('SELECT schluessel FROM abgleich_kennung WHERE konto_id = ?', kontoId)!.schluessel;
+}
+
+/** Erstes Gerät mit Schlüssel legt ihn für das Konto fest; danach nur noch vergleichen. */
+export function beanspruche(kontoId: number, id: string): string {
+  kennung(kontoId);
+  tue('UPDATE abgleich_kennung SET schluessel = ? WHERE konto_id = ? AND schluessel IS NULL', id, kontoId);
+  return schluesselId(kontoId)!;
+}
+
+/** Alles vergessen und neue Kennung (auch der Schlüssel gilt dann neu): Die Geräte merken daran, dass sie beim nächsten Mal alles senden müssen. */
+export function leereAbgleich(kontoId: number): void {
+  tue('DELETE FROM abgleich WHERE konto_id = ?', kontoId);
+  tue('DELETE FROM abgleich_kennung WHERE konto_id = ?', kontoId);
+}
+
+/** Änderungen nach `ab`, höchstens `max`. */
+export function holeAenderungen(kontoId: number, ab: number, max = 500) {
+  const z = alle<{ nr: number; tabelle: string; uid: string; zeit: string; daten: string; geloescht: number }>(
+    'SELECT nr, tabelle, uid, zeit, daten, geloescht FROM abgleich WHERE konto_id = ? AND nr > ? ORDER BY nr LIMIT ?',
     kontoId,
-    r.name,
-    r.datum,
-    JSON.stringify(r.einstellungen),
-    Date.now(),
+    ab,
+    max + 1,
   );
-  return Number(z.lastInsertRowid);
+  const mehr = z.length > max;
+  const seite = z.slice(0, max);
+  const letzte = eine<{ n: number | null }>('SELECT MAX(nr) AS n FROM abgleich WHERE konto_id = ?', kontoId)!.n ?? 0;
+  return {
+    aenderungen: seite.map((a) => ({
+      nr: a.nr,
+      tabelle: a.tabelle,
+      uid: a.uid,
+      zeit: a.zeit,
+      daten: JSON.parse(a.daten) as Record<string, unknown>,
+      geloescht: a.geloescht === 1,
+    })),
+    bis: seite.length ? seite[seite.length - 1]!.nr : Math.max(ab, 0),
+    letzte,
+    mehr,
+  };
 }
 
-export function loescheRezept(kontoId: number, id: number): boolean {
-  return tue('DELETE FROM rezepte WHERE id = ? AND konto_id = ?', id, kontoId).changes > 0;
+/** Eigene Änderungen eines Geräts aufnehmen. Gleiche Zeile mit gleicher Zeit nur einmal (Wiederholung, oder ein
+ * Gerät schickt beim Einstieg alles); Löschen ersetzt alles davor. */
+export function nimmAenderungen(kontoId: number, liste: Aenderung[]): Ergebnis<number> {
+  return inTransaktion(() => {
+    const n = eine<{ n: number }>('SELECT COUNT(*) AS n FROM abgleich WHERE konto_id = ?', kontoId)!.n;
+    if (n + liste.length > MAX_ABGLEICH) return { ok: false, fehler: 'Zu viele Daten im Abgleich' };
+    let neu = 0;
+    for (const a of liste) {
+      const tot = eine(
+        'SELECT 1 FROM abgleich WHERE konto_id = ? AND tabelle = ? AND uid = ? AND geloescht = 1',
+        kontoId,
+        a.tabelle,
+        a.uid,
+      );
+      if (tot) continue;
+      if (a.geloescht) tue('DELETE FROM abgleich WHERE konto_id = ? AND tabelle = ? AND uid = ?', kontoId, a.tabelle, a.uid);
+      neu += Number(
+        tue(
+          'INSERT OR IGNORE INTO abgleich (konto_id, tabelle, uid, zeit, daten, geloescht) VALUES (?, ?, ?, ?, ?, ?)',
+          kontoId,
+          a.tabelle,
+          a.uid,
+          a.zeit,
+          JSON.stringify(a.geloescht ? {} : a.daten),
+          a.geloescht ? 1 : 0,
+        ).changes,
+      );
+    }
+    return { ok: true, wert: neu };
+  });
 }
+
+/** Nur ein Gerät: Was es bis `bis` geholt hat, braucht der Server nicht mehr (z. B. übernommene alte Rezepte). */
+export function bestaetige(kontoId: number, bis: number): void {
+  tue('DELETE FROM abgleich WHERE konto_id = ? AND nr <= ?', kontoId, bis);
+}
+
+/** Einmalig: Rezepte und Timer-Stand aus der Zeit, als sie am Server lagen, in den Abgleich; dort holt sie das
+ * nächste Gerät des Kontos ab, danach sind sie am Server weg (bestaetige). Gleiche uid wie in src/speicher.ts. */
+function uebernimmAltbestand(): void {
+  const da = (t: string) => !!eine("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", t);
+  if (da('rezepte')) {
+    inTransaktion(() => {
+      const r = alle<{ id: number; konto_id: number; name: string; datum: string; einstellungen: string; erstellt: number }>(
+        'SELECT id, konto_id, name, datum, einstellungen, erstellt FROM rezepte',
+      );
+      for (const z of r) {
+        const zeit = `${String(z.erstellt).padStart(13, '0')}-0000-server0000`;
+        tue(
+          'INSERT OR IGNORE INTO abgleich (konto_id, tabelle, uid, zeit, daten, geloescht) VALUES (?, ?, ?, ?, ?, 0)',
+          z.konto_id,
+          'rezept',
+          altRezeptUid(z.id),
+          zeit,
+          JSON.stringify({ name: z.name, datum: z.datum, einstellungen: z.einstellungen }),
+        );
+      }
+      db.exec('DROP TABLE rezepte');
+      if (r.length) console.log(`${r.length} Rezepte vom Server in den Abgleich übernommen`);
+    });
+  }
+  if (da('timer_staende')) db.exec('DROP TABLE timer_staende');
+}
+
+/** uid eines Rezepts, das früher am Server lag (Zahl-ID): auf allen Geräten gleich, damit nichts doppelt kommt. */
+export const altRezeptUid = (id: number) => `00000000-0000-4000-8000-${id.toString(16).padStart(12, '0')}`;
+
+uebernimmAltbestand();
+raeumeSitzungenAuf();
 
 /* -------------------------------------------------------- Push und Backlauf */
 
@@ -284,25 +436,6 @@ export function backlaeufe(): { kontoId: number; lauf: Lauf }[] {
     kontoId: b.konto_id,
     lauf: JSON.parse(b.lauf),
   }));
-}
-
-/** Back-Timer des Kontos für den Abgleich zwischen den Geräten (ohne Eintrag: keiner, Zeitpunkt 0). */
-export function timerStand(kontoId: number): { lauf: unknown; geaendert: number } {
-  const z = eine<{ lauf: string | null; geaendert: number }>(
-    'SELECT lauf, geaendert FROM timer_staende WHERE konto_id = ?',
-    kontoId,
-  );
-  return z ? { lauf: z.lauf === null ? null : JSON.parse(z.lauf), geaendert: z.geaendert } : { lauf: null, geaendert: 0 };
-}
-
-export function setzeTimerStand(kontoId: number, lauf: unknown, geaendert: number): void {
-  tue(
-    `INSERT INTO timer_staende VALUES (?, ?, ?)
-     ON CONFLICT(konto_id) DO UPDATE SET lauf = excluded.lauf, geaendert = excluded.geaendert`,
-    kontoId,
-    lauf === null ? null : JSON.stringify(lauf),
-    geaendert,
-  );
 }
 
 export function anzahlBacklaeufe(): number {
@@ -381,9 +514,9 @@ export function uebersicht() {
     einladungen: alle<{ id: number; notiz: string; erstellt: number; gueltigBis: number }>(
       'SELECT id, notiz, erstellt, gueltig_bis AS gueltigBis FROM einladungen ORDER BY erstellt DESC',
     ),
-    konten: alle<{ id: number; name: string; erstellt: number; rezepte: number; geraete: number; zuletzt: number | null }>(
+    konten: alle<{ id: number; name: string; erstellt: number; abgleich: number; geraete: number; zuletzt: number | null }>(
       `SELECT k.id, k.name, k.erstellt,
-         (SELECT COUNT(*) FROM rezepte r WHERE r.konto_id = k.id) AS rezepte,
+         (SELECT COUNT(*) FROM abgleich a WHERE a.konto_id = k.id) AS abgleich,
          (SELECT COUNT(*) FROM sitzungen s WHERE s.konto_id = k.id) AS geraete,
          (SELECT MAX(zuletzt) FROM sitzungen s WHERE s.konto_id = k.id) AS zuletzt
        FROM konten k ORDER BY k.name`,

@@ -3,7 +3,7 @@ import SwiftUI
 /// Karte oben: „Sauerteig reift“ / „Backen läuft“ mit Countdown. Ohne laufenden Timer leer.
 struct TimerKarte: View {
     let r: Berechnung
-    @ObservedObject private var timer = BackTimer.shared
+    @EnvironmentObject private var timer: BackTimer
     @State private var sicher = false
 
     var body: some View {
@@ -64,7 +64,7 @@ struct TimerKarte: View {
 /// Blatt „Sauerteig angesetzt“: Startzeit (auch in der Vergangenheit) und Vorwarnung.
 struct TimerStartBlatt: View {
     let r: Berechnung
-    @ObservedObject private var timer = BackTimer.shared
+    @EnvironmentObject private var timer: BackTimer
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var start = Date()
@@ -153,3 +153,22 @@ struct AbhakenUmBlatt: View {
         .presentationDetents([.height(280)])
     }
 }
+
+#if DEBUG
+// MARK: - Timer-Karte
+
+#Preview("Timer · reift") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .reift) }
+#Preview("Timer · reif, Sauerteig prüfen") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .reifUeberfaellig) }
+#Preview("Timer · Backen läuft") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .backen) }
+#Preview("Timer · fertig") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .fertig) }
+
+#Preview("Blatt · Sauerteig angesetzt") {
+    Color.clear.sheet(isPresented: .constant(true)) { TimerStartBlatt(r: Vorschau.rezept) }.vorschau()
+}
+#Preview("Blatt · Sauerteig angesetzt, ersetzt Timer") {
+    Color.clear.sheet(isPresented: .constant(true)) { TimerStartBlatt(r: Vorschau.rezept) }.vorschau(timer: .reift)
+}
+#Preview("Blatt · Andere Uhrzeit") {
+    Color.clear.sheet(isPresented: .constant(true)) { AbhakenUmBlatt(i: 2, titel: "Formen, Stückgare") { _ in } }
+}
+#endif

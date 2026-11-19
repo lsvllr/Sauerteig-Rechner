@@ -9,9 +9,16 @@ import Foundation
 final class BackLive {
     static let shared = BackLive()
 
-    /// Lauf (`start`), für den schon eine Aktivität gestartet wurde. Hat man sie auf dem Sperrbildschirm weggewischt,
-    /// startet sie für diesen Lauf nicht von selbst neu.
-    private let gestartetKey = "back-live-gestartet"
+    /// Lauf (`start`) und Installation, für die schon eine Aktivität gestartet wurde. Hat man sie auf dem
+    /// Sperrbildschirm weggewischt, startet sie für diesen Lauf nicht von selbst neu. Nach einem Update oder einer
+    /// Neuinstallation (iOS beendet dabei alle Aktivitäten der App) aber schon.
+    private let gestartetKey = "back-live-gestartet-fuer"
+    private static let installation: String = {
+        let datei = Bundle.main.executableURL.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path) }
+        let datum = (datei?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        return (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") + "-" + String(Int(datum))
+    }()
+    private static func marke(_ l: BackLauf) -> String { "\(Int(l.start.rounded()))@\(installation)" }
     private var beobachtet: String?
     /// `apns:<Token>` der laufenden Aktivität, `nil` = keine oder noch kein Token.
     private var token: String?
@@ -24,9 +31,10 @@ final class BackLive {
         Activity<BackAktivitaet>.activities.filter { $0.activityState == .active || $0.activityState == .stale }
     }
 
-    /// Aktivität auf den Stand von `lauf` bringen: starten, aktualisieren oder beenden.
+    /// Aktivität auf den Stand von `lauf` bringen: starten, aktualisieren oder beenden. In den Einstellungen
+    /// ausgeschaltet: beenden (wieder eingeschaltet startet sie für den laufenden Lauf neu).
     func abgleichen(_ lauf: BackLauf?) async {
-        guard let l = lauf, l.phase == .backen, l.schritte.count > BackLauf.beginn + 1 else {
+        guard Einstellungen.liveAktivitaet, let l = lauf, l.phase == .backen, l.schritte.count > BackLauf.beginn + 1 else {
             UserDefaults.standard.removeObject(forKey: gestartetKey)
             await beendeAlle()
             return
@@ -49,7 +57,7 @@ final class BackLive {
                 a = neu
             }
             for b in laufende where b.id != a.id { await b.end(nil, dismissalPolicy: .immediate) }
-            UserDefaults.standard.set(l.start, forKey: gestartetKey)
+            UserDefaults.standard.set(Self.marke(l), forKey: gestartetKey)
             beobachte(a)
             if fertig {
                 await a.end(content, dismissalPolicy: .after(Self.abbauen(state)))
@@ -60,9 +68,9 @@ final class BackLive {
             await meldeWecker()
             return
         }
-        guard !fertig, UserDefaults.standard.double(forKey: gestartetKey) != l.start,
+        guard !fertig, UserDefaults.standard.string(forKey: gestartetKey) != Self.marke(l),
               ActivityAuthorizationInfo().areActivitiesEnabled, let a = starte(attr, content) else { return }
-        UserDefaults.standard.set(l.start, forKey: gestartetKey)
+        UserDefaults.standard.set(Self.marke(l), forKey: gestartetKey)
         beobachte(a)
         await meldeWecker()
     }
@@ -166,3 +174,9 @@ enum Wecker {
         _ = await post("api/wecker/stop", ["token": token])
     }
 }
+
+#if DEBUG
+import SwiftUI
+
+#Preview("Live-Aktivität") { BackAktivitaetGalerie() }
+#endif

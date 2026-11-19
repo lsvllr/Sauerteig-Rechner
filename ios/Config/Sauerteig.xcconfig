@@ -12,9 +12,14 @@ APP_BUNDLE_ID = de.eliasvollrath.sauerteig
 SLASH = /
 WECKER_URL = https:$(SLASH)$(SLASH)sauerteig.vollrath.app
 
-// Push für die Live-Aktivität braucht das bezahlte Apple Developer Program.
-// Kostenloses Konto („Personal Team“): leer lassen, dann ohne Weckdienst.
+// Server mit dem Weckdienst ist auch der Server für Konto und Abgleich zwischen Geräten (/api/sync).
+
+// Push für die Live-Aktivität und die iCloud-Sicherung (CloudKit) brauchen das bezahlte Apple Developer Program.
+// Kostenloses Konto („Personal Team“): beide leer lassen, dann ohne Weckdienst und ohne iCloud-Sicherung.
 CODE_SIGN_ENTITLEMENTS = Config/Sauerteig.entitlements
+// Container der iCloud-Sicherung, muss zu Config/Sauerteig.entitlements passen (dort fest eingetragen, weil das
+// Entwicklerportal keine Variablen auflöst).
+ICLOUD_CONTAINER = iCloud.de.eliasvollrath.sauerteig
 
 // Version für TestFlight/App Store. Die Build-Nummer setzen Tools/testflight.sh und der GitHub-Workflow selbst
 // (JJMMTT.HHMM, UTC).

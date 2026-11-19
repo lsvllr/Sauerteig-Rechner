@@ -1,12 +1,15 @@
-// Server des eigenständigen Sauerteig-Rechners: liefert die App aus (dist/), verwaltet Konten und Rezepte (db.ts)
-// und schickt die Erinnerungen des Back-Timers per Web-Push, sobald „Backen beginnen“ getippt wurde.
+// Server des eigenständigen Sauerteig-Rechners: liefert die App aus (dist/), verwaltet Konten (db.ts), gleicht ab
+// zwei Geräten eines Kontos deren Daten ab und schickt die Erinnerungen des Back-Timers per Web-Push.
 //
-// Konten nur mit Einladungscode vom Admin (ADMIN_PASSWORD, Seite /admin). Wie in der Haushalt-App hat jedes Konto
-// höchstens einen Backlauf, und die Meldungen gehen an alle Geräte des Kontos. Fällig wird nach denselben Regeln
-// wie im Browser (faellig() aus src/gemeinsam/timer.ts). Der Backlauf liegt in der Datenbank und übersteht so einen
-// Neustart. Den Zeitplan bekommt der Server über den Abgleich der Geräte (/api/timer/stand, src/abgleich.ts);
-// /api/timer (POST) und /api/timer/stop bleiben für ältere, noch zwischengespeicherte Versionen der App.
-// Dazu der Weckdienst der iOS-App (/api/wecker, server/wecker.ts): schaltet deren Live-Aktivität per APNs weiter.
+// Die Apps (Web und iOS) laufen ohne Server und ohne Konto; die Daten liegen auf dem Gerät. Ein Konto (nur mit
+// Einladungscode vom Admin, ADMIN_PASSWORD, Seite /admin) braucht es nur, um Geräte zu verknüpfen. Der Abgleich
+// (/api/sync/*, src/abgleich.ts, ios/Sauerteig/App/Abgleich.swift) ist ein Relais für Ende-zu-Ende verschlüsselte
+// Änderungen: Er kennt nur Tabelle, uid und Zeit, nimmt nur an, solange das Konto mindestens zwei Geräte hat, und
+// vergisst alles, sobald es wieder nur eins ist. Neues meldet er den anderen Geräten sofort: offene Apps über
+// Server-Sent Events (/api/sync/live), geschlossene iOS-Apps per stillem APNs-Push.
+// Push für die Web-App: Ab „Backen beginnen“ melden die Geräte den Zeitplan (/api/timer); den kennt der Server als
+// bewusste Ausnahme, sonst könnte er bei geschlossener Seite nicht melden. Fällig wird nach denselben Regeln wie im
+// Browser (faellig() aus src/gemeinsam/timer.ts). Dazu der Weckdienst der iOS-App (/api/wecker, server/wecker.ts).
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -16,7 +19,6 @@ import { BEGINN, VORLAUF_WAHL, faellig, type Lauf } from '../src/gemeinsam/timer
 import * as apns from './apns';
 import * as db from './db';
 import * as wecker from './wecker';
-import { alsLauf, kern, kernText } from '../src/laufKern';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const DIST = process.env.DIST ?? join(process.cwd(), 'dist');
@@ -94,21 +96,57 @@ function pruefeName(v: unknown): string | null {
   return n.length >= 1 && n.length <= 40 && !/[\u0000-\u001f\u007f]/.test(n) ? n : null;
 }
 
-const EINSTELLUNGEN = /^[a-zA-Z]{1,30}$/;
-function pruefeRezept(v: unknown): Omit<db.RezeptZeile, 'id'> | null {
-  const r = v as { name?: unknown; datum?: unknown; einstellungen?: unknown } | null;
-  if (!r || !istText(r.name, 80) || !r.name.trim() || !istText(r.datum, 20)) return null;
-  const e = r.einstellungen;
-  if (!e || typeof e !== 'object' || Array.isArray(e)) return null;
-  const aus: Record<string, string | number | boolean> = {};
-  const eintraege = Object.entries(e);
-  if (eintraege.length > 30) return null;
-  for (const [k, w] of eintraege) {
-    if (!EINSTELLUNGEN.test(k)) return null;
-    if (typeof w === 'boolean' || istZahl(w) || istText(w, 40)) aus[k] = w;
-    else return null;
+/* --------------------------------------------------------------- Abgleich */
+
+const TABELLEN = new Set(['rezept', 'profil', 'backlauf']);
+const UID = /^[A-Za-z0-9-]{1,64}$/;
+const ZEIT = /^(\d{13})-[0-9a-f]{4}-[A-Za-z0-9_]{8,64}$/;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
+const SCHLUESSEL_ID = /^[0-9a-f]{16}$/;
+const MAX_JE_SENDEN = 1000;
+
+/* Offene Apps (Server-Sent Events) je Konto; Cloudflare schließt stille Verbindungen nach rund 100 s. */
+const live = new Map<number, Set<{ res: ServerResponse; token: string }>>();
+setInterval(() => {
+  for (const s of live.values()) for (const l of s) l.res.write(': ping\n\n');
+}, 25_000).unref();
+
+/** Stiller Push je Gerät höchstens alle 10 s (mehrere Änderungen kurz hintereinander zusammen). */
+const pushGeplant = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Neues im Abgleich: den anderen Geräten des Kontos Bescheid geben (nicht dem, das gesendet hat). */
+function benachrichtige(kontoId: number, vonToken: string): void {
+  for (const l of live.get(kontoId) ?? []) if (l.token !== vonToken) l.res.write('event: neu\ndata: {}\n\n');
+  if (!apns.aktiv()) return;
+  for (const ziel of db.pushZiele(kontoId, vonToken)) {
+    if (pushGeplant.has(ziel)) continue;
+    pushGeplant.set(
+      ziel,
+      setTimeout(() => {
+        pushGeplant.delete(ziel);
+        void apns.sendeStill(ziel).then((r) => {
+          if (r === 'gone') db.vergissPushZiel(ziel);
+        });
+      }, 2000),
+    );
   }
-  return { name: r.name.trim(), datum: r.datum, einstellungen: aus };
+}
+
+/** Änderungen eines Geräts prüfen; Zeiten über 10 Minuten vor der Uhr des Servers lehnt er ab. */
+function pruefeAenderungen(v: unknown, jetzt: number): db.Aenderung[] | null {
+  if (!Array.isArray(v) || v.length > MAX_JE_SENDEN) return null;
+  const aus: db.Aenderung[] = [];
+  for (const a of v as Partial<db.Aenderung>[]) {
+    if (!a || !istText(a.tabelle, 20) || !TABELLEN.has(a.tabelle) || !istText(a.uid, 64) || !UID.test(a.uid)) return null;
+    const z = istText(a.zeit, 90) ? ZEIT.exec(a.zeit) : null;
+    if (!z || Number(z[1]) > jetzt + 10 * 60_000) return null;
+    if (typeof a.geloescht !== 'boolean' || !a.daten || typeof a.daten !== 'object' || Array.isArray(a.daten)) return null;
+    // Inhalt nur verschlüsselt: {x: base64}; Löschen ohne Inhalt
+    const x = (a.daten as { x?: unknown }).x;
+    if (!a.geloescht && (Object.keys(a.daten).length !== 1 || !istText(x, 60_000) || !BASE64.test(x))) return null;
+    aus.push({ tabelle: a.tabelle, uid: a.uid, zeit: a.zeit!, geloescht: a.geloescht, daten: a.geloescht ? {} : { x } });
+  }
+  return aus;
 }
 
 /* ------------------------------------------------------------------ Melden */
@@ -145,6 +183,7 @@ async function tick(): Promise<void> {
   }
 }
 
+setInterval(() => db.raeumeSitzungenAuf(), 24 * 3600_000);
 setInterval(() => {
   tick().catch((err) => console.warn('Back-Timer:', err));
   wecker.tick().catch((err) => console.warn('Wecker:', err));
@@ -270,19 +309,6 @@ function geraet(req: IncomingMessage): string {
   return [os.replace('Mac OS X', 'Mac'), browser.replace('Edg', 'Edge')].filter(Boolean).join(', ');
 }
 
-/** Altbestand aus dem Browser (vor den Konten) ins Konto übernehmen. */
-function importiere(kontoId: number, v: unknown): number {
-  if (!Array.isArray(v)) return 0;
-  let n = 0;
-  for (const r of v.slice(0, 200)) {
-    const ok = pruefeRezept(r);
-    if (!ok || db.anzahlRezepte(kontoId) >= db.MAX_REZEPTE) continue;
-    db.fuegeRezeptHinzu(kontoId, ok);
-    n++;
-  }
-  return n;
-}
-
 async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Promise<void> {
   const m = req.method ?? 'GET';
   if (m !== 'GET' && !eigeneHerkunft(req)) return fehler(res, 403, 'Fremde Herkunft');
@@ -309,45 +335,47 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     return json(res, 200, { ok: true, apns: apns.aktiv() });
   }
 
-  if (pfad === '/api/registrieren' && m === 'POST') {
+  // Neues Konto (Einladungscode) oder weiteres Gerät (Gerätecode). Die Daten bleiben auf dem Gerät; die iOS-App
+  // (``app: true``) bekommt den Sitzungs-Schlüssel in der Antwort und schickt ihn als Bearer-Token mit.
+  if ((pfad === '/api/registrieren' || pfad === '/api/anmelden') && m === 'POST') {
     if (gesperrt(ip)) return fehler(res, 429, 'Zu viele Versuche, bitte später noch einmal');
-    const d = await lies(req, MAX_BODY_IMPORT);
-    const name = pruefeName(d.name);
-    if (!name) return fehler(res, 400, 'Bitte einen Namen mit 1–40 Zeichen wählen');
-    if (!istText(d.code, 40)) return fehler(res, 400, 'Einladungscode fehlt');
-    const r = db.registriere(d.code, name);
-    if (!r.ok) {
-      if (r.fehler.startsWith('Einladungscode')) fehlversuch(ip);
-      return fehler(res, 400, r.fehler);
+    const d = await lies(req);
+    let k: (db.Konto & { schluessel?: string | null }) | null;
+    if (pfad === '/api/registrieren') {
+      const name = pruefeName(d.name);
+      if (!name) return fehler(res, 400, 'Bitte einen Namen mit 1–40 Zeichen wählen');
+      if (!istText(d.code, 40)) return fehler(res, 400, 'Einladungscode fehlt');
+      const r = db.registriere(d.code, name);
+      if (!r.ok) {
+        if (r.fehler.startsWith('Einladungscode')) fehlversuch(ip);
+        return fehler(res, 400, r.fehler);
+      }
+      k = r.wert;
+      console.log(`Neues Konto „${name}“`);
+    } else {
+      k = istText(d.code, 40) ? db.loeseGeraetecode(d.code) : null;
+      if (!k) {
+        fehlversuch(ip);
+        return fehler(res, 400, 'Gerätecode ungültig oder abgelaufen');
+      }
     }
-    const uebernommen = importiere(r.wert.id, d.rezepte);
-    console.log(`Neues Konto „${name}“ (${uebernommen} Rezepte übernommen)`);
-    const token = db.neueSitzung(r.wert.id, geraet(req));
-    return json(res, 200, { ok: true, name, uebernommen }, { 'Set-Cookie': sitzungsCookie(token) });
-  }
-
-  if (pfad === '/api/anmelden' && m === 'POST') {
-    if (gesperrt(ip)) return fehler(res, 429, 'Zu viele Versuche, bitte später noch einmal');
-    const d = await lies(req, MAX_BODY_IMPORT);
-    const k = istText(d.code, 40) ? db.loeseGeraetecode(d.code) : null;
-    if (!k) {
-      fehlversuch(ip);
-      return fehler(res, 400, 'Gerätecode ungültig oder abgelaufen');
-    }
-    const uebernommen = importiere(k.id, d.rezepte);
-    const token = db.neueSitzung(k.id, geraet(req));
-    return json(res, 200, { ok: true, name: k.name, uebernommen }, { 'Set-Cookie': sitzungsCookie(token) });
+    const token = db.neueSitzung(k.id, istText(d.geraet, 60) && d.geraet ? d.geraet : geraet(req));
+    const schluessel = 'schluessel' in k ? k.schluessel : null;
+    return json(res, 200, { ok: true, name: k.name, schluessel, ...(d.app === true ? { token } : {}) }, {
+      'Set-Cookie': sitzungsCookie(token),
+    });
   }
 
   /* ---------- Admin ---------- */
   if (pfad.startsWith('/api/admin/')) return admin(req, res, pfad, ip);
 
-  /* ---------- mit Anmeldung ---------- */
-  const token = cookies(req)[SITZUNG];
+  /* ---------- mit Anmeldung (Cookie der Web-App oder Bearer-Token der iOS-App) ---------- */
+  const bearer = /^Bearer (\S{20,200})$/.exec(req.headers.authorization ?? '')?.[1];
+  const token = bearer ?? cookies(req)[SITZUNG];
   const konto = token ? db.kontoZuSitzung(token) : null;
   if (!konto) return fehler(res, 401, 'Nicht angemeldet');
 
-  if (pfad === '/api/ich' && m === 'GET') return json(res, 200, { ok: true, name: konto.name });
+  if (pfad === '/api/ich' && m === 'GET') return json(res, 200, { ok: true, name: konto.name, geraete: db.geraete(konto.id) });
 
   if (pfad === '/api/abmelden' && m === 'POST') {
     db.beendeSitzung(token!);
@@ -356,54 +384,94 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     return json(res, 200, { ok: true }, { 'Set-Cookie': cookie(SITZUNG, '', 0) });
   }
 
-  if (pfad === '/api/geraetecode' && m === 'POST') return json(res, 200, { ok: true, ...db.neuerGeraetecode(konto.id) });
-
-  if (pfad === '/api/rezepte' && m === 'GET') return json(res, 200, { ok: true, rezepte: db.rezepte(konto.id) });
-  if (pfad === '/api/rezepte' && m === 'POST') {
-    const r = pruefeRezept(await lies(req));
-    if (!r) return fehler(res, 400, 'Rezept nicht lesbar');
-    if (db.anzahlRezepte(konto.id) >= db.MAX_REZEPTE) return fehler(res, 400, 'Zu viele Rezepte');
-    const id = db.fuegeRezeptHinzu(konto.id, r);
-    return json(res, 200, { ok: true, id });
+  // Gerätecode, optional mit dem verpackten Schlüssel des Kontos (verpackt mit dem geheimen Teil des Codes)
+  if (pfad === '/api/geraetecode' && m === 'POST') {
+    const d = await lies(req);
+    const schluessel = istText(d.schluessel, 400) && BASE64.test(d.schluessel) ? d.schluessel : null;
+    return json(res, 200, { ok: true, ...db.neuerGeraetecode(konto.id, schluessel) });
   }
-  const rz = /^\/api\/rezepte\/(\d+)$/.exec(pfad);
-  if (rz && m === 'DELETE') {
-    return db.loescheRezept(konto.id, Number(rz[1])) ? json(res, 200, { ok: true }) : fehler(res, 404, 'Nicht gefunden');
+  // Schlüssel auf ein schon angemeldetes Gerät holen (Gerätecode eines anderen Geräts desselben Kontos)
+  if (pfad === '/api/schluessel' && m === 'POST') {
+    if (gesperrt(ip)) return fehler(res, 429, 'Zu viele Versuche, bitte später noch einmal');
+    const d = await lies(req);
+    const k = istText(d.code, 40) ? db.loeseGeraetecode(d.code, konto.id) : null;
+    if (!k?.schluessel) {
+      fehlversuch(ip);
+      return fehler(res, 400, 'Gerätecode ungültig oder abgelaufen');
+    }
+    return json(res, 200, { ok: true, schluessel: k.schluessel });
   }
 
+  // Abgleich: nur ab zwei Geräten. ``ab`` ist der Stand, bis zu dem das Gerät geholt und übernommen hat.
+  // ``schluessel``: Kennung des Schlüssels des Geräts. Das erste Gerät legt sie fest; ein Gerät mit anderem oder
+  // ohne Schlüssel bekommt nichts (``schluesselDa``: das Konto hat schon einen).
+  if (pfad === '/api/sync/holen' && m === 'GET') {
+    const q = new URL(req.url ?? '/', 'http://x').searchParams;
+    const k = db.kennung(konto.id);
+    const ab = q.get('kennung') === k ? Math.max(0, Number(q.get('ab')) || 0) : 0;
+    const geraete = db.geraete(konto.id);
+    const mein = q.get('schluessel') ?? '';
+    const sid = SCHLUESSEL_ID.test(mein) ? db.beanspruche(konto.id, mein) : db.schluesselId(konto.id);
+    if (sid !== mein)
+      return json(res, 200, { ok: true, kennung: k, geraete, schluessel: false, schluesselDa: !!sid, aenderungen: [], bis: ab, mehr: false });
+    if (geraete < 2 && ab > 0) db.bestaetige(konto.id, ab);
+    return json(res, 200, { ok: true, kennung: k, geraete, schluessel: true, ...db.holeAenderungen(konto.id, ab) });
+  }
+  // Offene App: „neu“, sobald ein anderes Gerät etwas gesendet hat
+  if (pfad === '/api/sync/live' && m === 'GET') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 5000\n: hallo\n\n');
+    const eintrag = { res, token: token! };
+    const s = live.get(konto.id) ?? new Set();
+    s.add(eintrag);
+    live.set(konto.id, s);
+    req.on('close', () => {
+      s.delete(eintrag);
+      if (!s.size) live.delete(konto.id);
+    });
+    return;
+  }
+  // iOS-App: Push-Token für den stillen Push (apns:<hex>, Debug-Builds apns-sandbox:<hex>)
+  if (pfad === '/api/sync/push' && m === 'POST') {
+    const d = await lies(req);
+    const push = istText(d.push, 220) ? d.push.toLowerCase() : '';
+    if (push && !apns.zerlege(push)) return fehler(res, 400, 'Token nicht lesbar');
+    db.setzePush(token!, push || null);
+    return json(res, 200, { ok: true });
+  }
+  if (pfad === '/api/sync/senden' && m === 'POST') {
+    const d = await lies(req, MAX_BODY_IMPORT);
+    const jetzt = Date.now();
+    const k = db.kennung(konto.id);
+    const geraete = db.geraete(konto.id);
+    // Andere Kennung: das Gerät kennt den Stand nicht (geleert) und muss erst holen und dann alles senden.
+    if (d.kennung !== k || geraete < 2 || !istText(d.schluessel, 20) || d.schluessel !== db.schluesselId(konto.id))
+      return json(res, 200, { ok: true, kennung: k, geraete, angenommen: false });
+    const liste = pruefeAenderungen(d.aenderungen, jetzt);
+    if (!liste) return fehler(res, 400, 'Änderungen nicht lesbar');
+    const r = db.nimmAenderungen(konto.id, liste);
+    if (!r.ok) return fehler(res, 413, r.fehler);
+    if (r.wert > 0) benachrichtige(konto.id, token!);
+    return json(res, 200, { ok: true, kennung: k, geraete, angenommen: true });
+  }
+
+  // Push für die Web-App: Zeitplan ab „Backen beginnen“ (mit dem Abo dieses Browsers, oder ohne von einem
+  // anderen Gerät des Kontos, z. B. der iOS-App; ohne Abo im Konto merkt der Server sich nichts); Beenden.
   if (pfad === '/api/timer' && m === 'POST') {
     const d = await lies(req);
-    const abo = pruefeAbo(d.abo);
+    const abo = d.abo === undefined ? undefined : pruefeAbo(d.abo);
     const lauf = pruefeLauf(d.lauf, Date.now());
-    if (!abo || !lauf) return fehler(res, 400, 'Zeitplan oder Abo nicht lesbar');
-    db.merkeAbo(konto.id, abo);
+    if (abo === null || !lauf) return fehler(res, 400, 'Zeitplan oder Abo nicht lesbar');
+    if (abo) db.merkeAbo(konto.id, abo);
+    if (!db.abos(konto.id).length) return json(res, 200, { ok: true, gemerkt: false });
     faellig(lauf, Date.now()); // schon Vergangenes als gemeldet merken
     db.setzeBacklauf(konto.id, lauf);
     return json(res, 200, { ok: true });
-  }
-  // Abgleich des Back-Timers zwischen den Geräten (src/abgleich.ts): es gilt die neueste Änderung.
-  if (pfad === '/api/timer' && m === 'GET') return json(res, 200, { ok: true, ...db.timerStand(konto.id) });
-  if (pfad === '/api/timer/stand' && m === 'POST') {
-    const d = await lies(req);
-    const jetzt = Date.now();
-    const lauf = alsLauf(d.lauf ?? null);
-    if (lauf === undefined || !istZahl(d.geaendert) || d.geaendert <= 0) return fehler(res, 400, 'Timer nicht lesbar');
-    if (lauf && lauf.schritte.some((s) => Math.abs(s.at - jetzt) > 7 * 24 * 3600_000))
-      return fehler(res, 400, 'Timer nicht lesbar');
-    const geaendert = Math.min(d.geaendert, jetzt + 60_000); // vorgehende Uhr des Geräts gewinnt nicht ewig
-    const alt = db.timerStand(konto.id);
-    if (geaendert <= alt.geaendert) return json(res, 200, { ok: true, ...alt }); // anderes Gerät war neuer
-    db.setzeTimerStand(konto.id, kern(lauf), geaendert);
-    // Push nur neu planen, wenn sich der Zeitplan geändert hat (sonst kämen Meldungen doppelt oder gar nicht)
-    const vorher = alsLauf(alt.lauf);
-    if (kernText(lauf) !== kernText(vorher ?? null)) {
-      const push = lauf?.phase === 'backen' ? pruefeLauf(lauf, jetzt) : null;
-      if (push) {
-        faellig(push, jetzt); // schon Vergangenes als gemeldet merken
-        db.setzeBacklauf(konto.id, push);
-      } else db.loescheBacklauf(konto.id);
-    }
-    return json(res, 200, { ok: true, lauf: kern(lauf), geaendert });
   }
   if (pfad === '/api/push-abo' && m === 'POST') {
     const abo = pruefeAbo((await lies(req)).abo);

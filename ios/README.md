@@ -2,10 +2,11 @@
 
 Native iPhone- und iPad-App (SwiftUI, iOS 17+) des Sauerteig-Rechners, **local-first** nach
 [LOCAL-FIRST.md](LOCAL-FIRST.md) (Vorlage aus der Haushalt-App): Das Gerät hat alle Daten und rechnet alles, ohne
-Server und ohne Ladeanzeige. Umgesetzt sind die Stufen 1–4 aus Abschnitt 10:
+Server, ohne Konto und ohne Ladeanzeige. Umgesetzt sind die Stufen 1–5 aus Abschnitt 10:
 
 1. **Lokal, ein Gerät:** Rechner (gleiche Rundungen und Texte wie die Web-App), Rezepte sichern/laden/löschen
-   (6 s Rückgängig), Füttern mit Rhythmus und lokaler Erinnerung um 8 Uhr.
+   (6 s Rückgängig), Füttern mit Rhythmus und lokaler Erinnerung (Uhrzeit in den
+   Einstellungen oben rechts, Standard 8 Uhr; dort auch Mitteilungen und Live-Aktivität ein-/ausschalten).
 2. **Back-Timer:** „Sauerteig angesetzt“ (Startzeit auch rückwirkend), „Backen beginnen“, Abhaken (auch mit
    anderer Uhrzeit über die Uhr daneben), Vorwarnung, lokale Mitteilungen auch bei geschlossener App.
 3. **Live-Aktivität** ab „Backen beginnen“ auf Sperrbildschirm und Dynamic Island, mit Countdown, Fortschritt und
@@ -13,15 +14,42 @@ Server und ohne Ladeanzeige. Umgesetzt sind die Stufen 1–4 aus Abschnitt 10:
 4. **Weckdienst:** Der Node-Server dieses Repos (`/api/wecker`, `server/wecker.ts`) schaltet die Aktivität per
    APNs zu jedem Schritt weiter, auch bei geschlossener App. Er kennt nur Push-Token und Uhrzeiten, keine Rezepte.
 
-Stufe 5 (Abgleich zwischen Geräten) fehlt noch; das Datenformat ist dafür vorbereitet (siehe *Daten*).
+5. **Abgleich zwischen Geräten** (`App/Abgleich.swift`, gleiches Protokoll wie die Web-App `src/abgleich.ts`): nur
+   mit Konto, verknüpft in den Einstellungen per Gerätecode (oder neues Konto per Einladungscode). Der Server ist
+   Relais und hält Daten nur, solange das Konto mindestens zwei Geräte hat. **Ende-zu-Ende verschlüsselt**
+   (`Core/Verschluesselung.swift`, gleiches Format wie `src/schluessel.ts`): AES-256-GCM mit einem Schlüssel je
+   Konto; der Server sieht nur Tabelle, uid und Zeit. Den Schlüssel bringt der 16-stellige Gerätecode mit (zweite
+   Hälfte geht nie an den Server). Verteilt wird sofort: offene Apps hören auf `/api/sync/live` (Server-Sent
+   Events), geschlossene weckt ein stiller APNs-Push (`content-available`), dann holt die App, plant Mitteilungen
+   neu und schaltet die Live-Aktivität weiter. iOS liefert stille Pushs nach eigenem Ermessen (Akku, Häufigkeit);
+   beim Öffnen holt die App ohnehin.
+
+Dazu die **Sicherung in iCloud** (`App/Sicherung.swift`): die Tabellen als ein Datensatz in der privaten
+CloudKit-Datenbank des Nutzers. Beim Öffnen einspielen (je Feld gewinnt die spätere Zeit), nach Änderungen und
+beim Wechsel in den Hintergrund sichern. Nach Neuinstallation oder auf einem neuen iPhone kommt so alles zurück.
 
 ## Einrichten
 
-1. `Config/Sauerteig.xcconfig`: Team-ID, Bundle-ID (`APP_BUNDLE_ID`), Server des Weckdienstes (`WECKER_URL`).
+1. `Config/Sauerteig.xcconfig`: Team-ID, Bundle-ID (`APP_BUNDLE_ID`), Server für Weckdienst und Abgleich
+   (`WECKER_URL`), iCloud-Container (`ICLOUD_CONTAINER`, Standard `iCloud.<Bundle-ID>`).
 2. `Sauerteig.xcodeproj` öffnen, Gerät wählen, ⌘R. Neue Swift-Dateien in `Sauerteig/`, `Widgets/`, `Shared/`
    landen von selbst im Projekt (synchronisierte Ordner).
 
-Kostenloses Apple-Konto: `CODE_SIGN_ENTITLEMENTS` leer lassen. Dann läuft alles außer dem Weckdienst.
+Kostenloses Apple-Konto: `CODE_SIGN_ENTITLEMENTS` und `ICLOUD_CONTAINER` leer lassen. Dann läuft alles außer
+Weckdienst und iCloud-Sicherung.
+
+### iCloud einmalig einrichten
+
+1. In Xcode: Target *Sauerteig* > Signing & Capabilities > **iCloud**, Haken bei **CloudKit**, unter „Containers“
+   `iCloud.de.eliasvollrath.sauerteig` anhaken (mit + anlegen, falls er fehlt). Der Name steht fest in
+   `Config/Sauerteig.entitlements`, weil das Entwicklerportal `$(…)`-Variablen nicht auflöst. Für den stillen
+   Push stehen „Push Notifications“ (`aps-environment`) und der Hintergrundmodus `remote-notification`
+   (Info.plist) schon drin.
+2. Einmal aus Xcode auf einem Gerät mit iCloud starten und etwas speichern: In der Entwicklungsumgebung legt
+   CloudKit den Datensatztyp `Sicherung` (Felder `daten` als Asset, `geraet` als Text) dabei selbst an.
+3. **Vor dem ersten TestFlight-Build** im [CloudKit-Dashboard](https://icloud.developer.apple.com) den Container
+   wählen > Schema > **Deploy Schema Changes** in die Produktion. TestFlight und App Store nutzen die Produktion;
+   ohne diesen Schritt meldet die Sicherung dort einen Fehler.
 
 ## TestFlight
 
@@ -51,8 +79,9 @@ Ablauf: Die App meldet `POST /api/wecker {token: "apns:<hex>", zeiten: [ms…]}`
 
 ```
 Sauerteig/
-  App/     Einstieg + AppDelegate (verdrahtet „Erledigt“), AppState (Toast, Adressen), BackTimer, BackLive
-           (Live-Aktivität + Weckdienst-Client), Mitteilungen
+  App/     Einstieg + AppDelegate (verdrahtet „Erledigt“ und Datenbank-Änderungen), AppState (Toast, Adressen),
+           BackTimer, BackLive (Live-Aktivität + Weckdienst-Client), Mitteilungen, Einstellungen, Abgleich (Konto,
+           Sitzungs-Schlüssel im Schlüsselbund, /api/sync), Sicherung (CloudKit)
   Core/    Datenbank (uid, Feldzeiten, Löschmarken, hybride Uhr, ausstehende Änderungen), Daten (Rezepte, Füttern,
            Back-Lauf als Tabellen), BackLauf (Regeln), Rechner
   Pages/   HauptAnsicht, TimerKarte, FuetternKarte, Teile (Regler, Anleitung)
@@ -69,13 +98,21 @@ Eine JSON-Datei `daten.json` in Application Support. Tabellen `rezept` (Einstell
 der Web-App), `profil` (eine Zeile mit fester uid: Füttern), `backlauf` (je „Sauerteig angesetzt“ eine neue Zeile,
 Zeitplan als ein JSON-Feld, Beenden = Löschmarke). Jede Schreiboperation erzeugt eine Änderung
 `{tabelle, uid, daten, geloescht, zeit}` in „ausstehend“; `Datenbank.wende(_:)` spielt fremde Änderungen je Feld
-nach der späteren Zeit ein. Für Stufe 5 fehlen nur Senden/Holen (`/sync/senden`, `/sync/holen`) und der stille Push.
+nach der späteren Zeit ein. Die Web-App hat dieselbe Datenbank in TypeScript (`src/datenbank.ts`, localStorage),
+gleiche Tabellen und Felder; ihr Back-Timer wird in `src/timerDaten.ts` auf die Tabelle `backlauf` abgebildet.
+
+Abgleich (`GET /api/sync/holen?kennung=…&ab=n`, `POST /api/sync/senden {kennung, aenderungen}`): Der Server nimmt
+nur an, wenn das Konto mindestens zwei Geräte hat. Je Kennung schickt ein Gerät einmal alles (Schnappschuss, Feldzeiten
+bleiben erhalten), danach nur „ausstehend“. Fällt das Konto auf ein Gerät zurück, leert der Server alles und vergibt
+eine neue Kennung; beim nächsten Einstieg schicken die Geräte wieder alles. Allein im Konto verwirft das Gerät
+„ausstehend“. Rezepte, die früher am Server lagen, hat der Server beim Update einmal in den Abgleich gelegt; das
+nächste Gerät des Kontos holt sie ab, danach sind sie dort weg.
 Die Einstellungen des Rechners (Regler) sind gerätelokal (UserDefaults).
 
 ## Prüfen
 
-- `ios/Tools/pruefe_kern.sh`: Uhr, Datenbank-Zusammenführung, Rezept-Rundreise, Abhaken, ContentState und das
-  Push-JSON des Weckdienstes.
+- `ios/Tools/pruefe_kern.sh`: Uhr, Datenbank-Zusammenführung, Rezept-Rundreise, Abhaken, ContentState, das
+  Push-JSON des Weckdienstes, Schnappschuss/Quittieren und Sicherungs-Rundreise.
 - Live-Aktivität und Mitteilungen nur auf einem echten Gerät sinnvoll testbar.
 
 Offen (LOCAL-FIRST.md 6.8): ob AlarmKit (iOS 26) Back-Schritte als Systemwecker abbilden kann.

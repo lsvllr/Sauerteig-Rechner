@@ -4,10 +4,16 @@
 <dict>
 	<key>WeckerURL</key>
 	<string>$(WECKER_URL)</string>
+	<key>ICloudContainer</key>
+	<string>$(ICLOUD_CONTAINER)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>de</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>CFBundleURLTypes</key>

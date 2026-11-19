@@ -3,8 +3,8 @@ import Foundation
 // Lokale Datenbank (ios/LOCAL-FIRST.md, Abschnitt 3): Das Gerät hat alle Daten, die Datei auf dem Gerät ist die
 // Wahrheit. Jede Zeile hat eine uid, jedes Feld die Zeit seiner letzten Änderung (hybride logische Uhr). Jede
 // Schreiboperation erzeugt eine Änderung `{tabelle, uid, daten, geloescht, zeit}` und landet in „ausstehend“.
-// Gesendet wird noch nichts; der Abgleich (Stufe 5) kann diese Liste später ohne Umbau an /sync/senden geben und
-// fremde Änderungen über `wende(_:)` einspielen.
+// Der Abgleich (App/Abgleich.swift, nur mit Konto und ab zwei Geräten) sendet diese Liste und spielt fremde
+// Änderungen über `wende(_:)` ein; die Sicherung in iCloud (App/Sicherung.swift) nutzt dieselbe Zusammenführung.
 
 /// Feldwert, wie er im JSON steht. Tolerant beim Lesen (Zahl als Text, Bool als 0/1).
 enum Wert: Codable, Hashable, Sendable {
@@ -154,6 +154,8 @@ final class Datenbank: ObservableObject {
 
     @Published private(set) var tabellen: [String: [String: Zeile]]
     private(set) var aus: [Aenderung]
+    /// Nach jeder gespeicherten Änderung; `true`, wenn sie von außen kam (Abgleich, Sicherung).
+    var beiAenderung: ((_ fremd: Bool) -> Void)?
     private var uhr: Uhr
     private let url: URL?
 
@@ -224,11 +226,53 @@ final class Datenbank: ObservableObject {
     /// Fremde Änderung aus dem Abgleich einspielen: je Feld gilt die spätere Zeit, gelöscht bleibt gelöscht.
     func wende(_ fremd: [Aenderung]) {
         guard !fremd.isEmpty else { return }
+        let vorher = tabellen
         for a in fremd {
             uhr.sieh(a.zeit)
             wendeAn(a)
         }
-        speichere()
+        guard tabellen != vorher else { return }
+        speichere(fremd: true)
+    }
+
+    /// Beim Server angekommen (oder nicht mehr nötig, weil beim Einstieg ohnehin alles gesendet wird).
+    func quittiere(_ zeiten: Set<String>) {
+        let n = aus.count
+        aus.removeAll { zeiten.contains($0.zeit) }
+        if aus.count != n { speichere(fremd: nil) }
+    }
+
+    /// Alles als Änderungen (Einstieg in einen Abgleich, Sicherung).
+    func schnappschuss() -> [Aenderung] { Self.schnappschuss(tabellen) }
+
+    /// Je Zeile gruppiert nach Feldzeit, damit die Zeiten erhalten bleiben; Löschmarken als `geloescht`.
+    nonisolated static func schnappschuss(_ tabellen: [String: [String: Zeile]]) -> [Aenderung] {
+        var out: [Aenderung] = []
+        for (t, zeilen) in tabellen {
+            for (uid, z) in zeilen {
+                if z.geloescht {
+                    if let zeit = z.z[Zeile.loeschFeld] { out.append(Aenderung(tabelle: t, uid: uid, daten: [:], geloescht: true, zeit: zeit)) }
+                    continue
+                }
+                var jeZeit: [String: [String: Wert]] = [:]
+                for (k, v) in z.d { if let zeit = z.z[k] { jeZeit[zeit, default: [:]][k] = v } }
+                for (zeit, daten) in jeZeit { out.append(Aenderung(tabelle: t, uid: uid, daten: daten, geloescht: false, zeit: zeit)) }
+            }
+        }
+        return out.sorted { $0.zeit < $1.zeit }
+    }
+
+    /// Inhalt für die Sicherung: nur die Tabellen (Uhr und „ausstehend“ gehören zum Gerät).
+    func sicherung() -> Data? {
+        let e = JSONEncoder()
+        e.outputFormatting = .sortedKeys
+        return try? e.encode(tabellen)
+    }
+
+    /// Sicherung einspielen: wie fremde Änderungen, je Feld gewinnt die spätere Zeit.
+    func uebernimmSicherung(_ d: Data) {
+        guard let t = try? JSONDecoder().decode([String: [String: Zeile]].self, from: d) else { return }
+        wende(Self.schnappschuss(t))
     }
 
     private func wendeAn(_ a: Aenderung) {
@@ -260,9 +304,41 @@ final class Datenbank: ObservableObject {
         aus.append(a)
     }
 
-    private func speichere() {
-        guard let url else { return }
-        let datei = Datei(tabellen: tabellen, aus: aus, uhr: uhr)
-        if let d = try? JSONEncoder().encode(datei) { try? d.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
+    /// `fremd == nil`: keine Datenänderung (nur „ausstehend“), nicht melden.
+    private func speichere(fremd: Bool? = false) {
+        if let url, let d = try? JSONEncoder().encode(Datei(tabellen: tabellen, aus: aus, uhr: uhr)) {
+            try? d.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
+        if let fremd { beiAenderung?(fremd) }
     }
 }
+
+#if DEBUG && canImport(UIKit)
+import SwiftUI
+
+/// Inhalt der Datenbank als Tabelle: jede Zeile mit ihren Feldern.
+private struct DatenbankInhalt: View {
+    @ObservedObject var db: Datenbank
+
+    var body: some View {
+        List {
+            ForEach(db.tabellen.keys.sorted(), id: \.self) { t in
+                Section(t) {
+                    ForEach(db.zeilen(t), id: \.uid) { uid, z in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(uid).font(.caption.monospaced()).foregroundStyle(.secondary)
+                            ForEach(z.d.keys.sorted(), id: \.self) { k in
+                                Text("\(k): \(String(describing: z.d[k]!))").font(.caption2.monospaced()).lineLimit(2)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#Preview("Datenbank · Beispieldaten") {
+    DatenbankInhalt(db: Vorschau.datenbank(timer: .backen, fuettern: .ok, rezepte: true))
+}
+#endif

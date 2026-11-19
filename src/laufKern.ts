@@ -1,5 +1,5 @@
 // Back-Timer im Austauschformat: ohne die Felder, die nur das einzelne Gerät braucht (gemeldet, fern). So geht er
-// an den Server (Abgleich zwischen den Geräten des Kontos, abgleich.ts) und an die Haushalt-App (haushaltApp.ts).
+// an den Server (Push ab „Backen beginnen“, fern.ts), an die Haushalt-App (haushaltApp.ts) und zum Vergleich in timerDaten.ts.
 // Auch der Server prüft damit, was ankommt.
 import { VORLAUF_WAHL, type Lauf } from './gemeinsam/timer';
 

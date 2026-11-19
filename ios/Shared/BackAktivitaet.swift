@@ -80,3 +80,9 @@ struct BackAbhakenIntent: LiveActivityIntent {
 enum BackAbhaken {
     nonisolated(unsafe) static var ausfuehren: (@Sendable (_ schritt: Int, _ at: Double) async -> Void)?
 }
+
+#if DEBUG && !WIDGET_EXTENSION // Vorschau läuft in der App (Beispieldaten in Sauerteig/Vorschau)
+import SwiftUI
+
+#Preview("Live-Aktivität") { BackAktivitaetGalerie() }
+#endif

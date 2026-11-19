@@ -19,7 +19,10 @@ export interface Eingabe {
     ofenTemp?: number;
 }
 
-export type SchrittArt = 'ansetzen' | 'autolyse' | 'mischen' | 'formen' | 'ofen' | 'backen' | 'auskuehlen';
+/** Hauptteig mischen und kneten, danach beginnt die erste Gare. */
+const HAUPTTEIG_DAUER = '10 Min';
+
+export type SchrittArt = 'ansetzen' | 'autolyse' | 'mischen' | 'gare' | 'formen' | 'ofen' | 'backen' | 'auskuehlen';
 
 /** [Minuten ab T, Titel, Dauer-Text, Art (für Zutaten und Anleitung im Ablauf)] */
 export type Schritt = [number, string, string, SchrittArt?];
@@ -33,7 +36,6 @@ export interface Rezept {
     mehl: Anteile;
     hauptteigWasser: number;
     salz: number;
-    kuemmel: string;
     teiggewicht: number;
     einzelGewicht: number;
     hydration: number;
@@ -149,7 +151,6 @@ export function berechneRezept(e: Eingabe): Rezept {
     const hauptteigWasser = Math.max(0, gesamtWasserZiel - sauerteigWasser);
 
     const salz = Math.round(14 * skalierung);
-    const kuemmel = (1.5 * skalierung).toFixed(1);
 
     const teiggewicht = Math.round(sauerteigGesamt + gesamtMehl + hauptteigWasser + salz);
     const hydration = Math.round(((sauerteigWasser + hauptteigWasser) / gesamtMehlGesamt) * 100);
@@ -181,7 +182,8 @@ export function berechneRezept(e: Eingabe): Rezept {
     // Ablauf (Mittelwerte der Spannen)
     const bz = spanne(backZeit);
     const tMischen = mitte(spanne(zeitplan.sauerteigZeit));
-    const tFormen = tMischen + mitte(spanne(ersteGare));
+    const tGare = tMischen + mitte(spanne(HAUPTTEIG_DAUER));
+    const tFormen = tGare + mitte(spanne(ersteGare));
     const tBacken = tFormen + mitte([stueckgareMin, stueckgareMax]);
     const tOfen = Math.max(tFormen, tBacken - 35);
     const tAus = tBacken + dampfMin + mitte(bz);
@@ -189,19 +191,19 @@ export function berechneRezept(e: Eingabe): Rezept {
     if (mitAutolyse) {
         schritte.push([tMischen - mitte(spanne(autolyseZeit)), 'Autolyse ansetzen (vor Sauerteig-Reife)', autolyseZeit, 'autolyse']);
     }
-    // Roggen kommt erst nach der Autolyse dazu (bringt dort nichts).
-    const zugeben = (mehl.roggen > 0 ? 'Roggenmehl, ' : '') + 'Sauerteig + Salz zugeben, erste Gare';
+    // Roggen kommt erst nach der Autolyse dazu (bringt dort nichts); was genau, steht in der Anleitung des Schritts.
     schritte.push(
-        [tMischen, mitAutolyse ? zugeben : 'Hauptteig mischen, erste Gare', ersteGare, 'mischen'],
+        [tMischen, 'Hauptteig', HAUPTTEIG_DAUER, 'mischen'],
+        [tGare, 'Erste Gare', ersteGare, 'gare'],
         [tFormen, 'Formen, Stückgare', stueckgare, 'formen'],
-        [tOfen, `Ofen auf ${anbackTemp} °C vorheizen`, '30-40 Min', 'ofen'],
+        [tOfen, `Ofen auf ${ofenTemp} °C vorheizen`, '30-40 Min', 'ofen'],
         [tBacken, 'Backen', (bz[0] + dampfMin) + '-' + (bz[1] + dampfMin) + ' Min', 'backen'],
         [tAus, 'Auskühlen', 'min. 2h', 'auskuehlen']
     );
 
     return {
         anstellgut, sauerteigMehl, sauerteigWasser, sauerteigGesamt,
-        gesamtMehl, mehl, hauptteigWasser, salz, kuemmel,
+        gesamtMehl, mehl, hauptteigWasser, salz,
         teiggewicht, einzelGewicht, hydration,
         zeitplan, ersteGare, stueckgare, backZeit, dampfMin, ofenTemp, anbackTemp,
         autolyseZeit, mitAutolyse, tempHinweis,

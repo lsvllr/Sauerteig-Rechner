@@ -88,3 +88,15 @@ struct ToastView: View {
         .padding(.horizontal, Metrics.gutter)
     }
 }
+
+#if DEBUG
+#Preview("Hinweise") {
+    VStack(spacing: 12) {
+        ToastView(toast: AppState.Toast(text: "Gesichert", art: .erfolg)) {}
+        ToastView(toast: AppState.Toast(text: "Fehlgeschlagen", art: .fehler)) {}
+        ToastView(toast: AppState.Toast(text: "Gelöscht", art: .info, rueckgaengig: {})) {}
+    }
+    .frame(maxHeight: .infinity)
+    .hhBackground()
+}
+#endif

@@ -21,6 +21,25 @@ struct Fuetterung: Hashable {
         zuletzt.flatMap { Calendar.current.date(byAdding: .day, value: intervall, to: Calendar.current.startOfDay(for: $0)) }
             .map { $0.addingTimeInterval(12 * 3600) }
     }
+
+    /// Ab so vielen Tagen über der Fälligkeit gilt der Sauerteig als dringend (Glas rot, Erinnerung jeden Tag).
+    static let dringendAb = 2
+
+    /// Tage bis zur Fälligkeit nach Kalendertagen: 0 = heute fällig, negativ = überfällig; `nil` = nie eingetragen.
+    func restTage(heute: Date = Date()) -> Int? {
+        guard let faellig else { return nil }
+        let cal = Calendar.current
+        return cal.dateComponents([.day], from: cal.startOfDay(for: heute), to: cal.startOfDay(for: faellig)).day
+    }
+
+    enum Stand { case ruhig, faellig, dringend }
+
+    /// Farbe des Glases oben links: fällig (gelb) ab dem Fälligkeitstag, dringend (rot) ab `dringendAb` Tagen drüber.
+    func stand(heute: Date = Date()) -> Stand {
+        guard let rest = restTage(heute: heute) else { return .ruhig }
+        if rest <= -Self.dringendAb { return .dringend }
+        return rest <= 0 ? .faellig : .ruhig
+    }
 }
 
 extension Datenbank {
@@ -103,3 +122,10 @@ extension Datenbank {
         for (uid, _) in zeilen(BackLauf.tabelle) { loesche(BackLauf.tabelle, uid) }
     }
 }
+
+#if DEBUG && canImport(UIKit)
+import SwiftUI
+
+#Preview("Füttern · überfällig") { FuetternKarte().vorschauKarte().vorschau(fuettern: .ueberfaellig) }
+#Preview("Gespeicherte Rezepte") { HauptAnsicht().vorschau(rezepte: true) }
+#endif

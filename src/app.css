@@ -1,5 +1,7 @@
 /* Nur für die eigenständige App: Titel ohne Kopfzeile der Haushalt-App. */
 .sd-titel { margin: max(env(safe-area-inset-top, 0px), 12px) 0 2px; }
+.sd-kopf { margin: max(env(safe-area-inset-top, 0px), 12px) 0 2px; }
+.sd-zahnrad { margin-right: -6px; color: var(--accent); border: 0; background: none; }
 .sd-untertitel { margin: 0 0 16px; }
 
 /* Anmeldung, Konto, Admin */

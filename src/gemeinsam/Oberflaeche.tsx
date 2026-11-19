@@ -162,15 +162,7 @@ function SauerteigSalz({ r }: { r: Berechnung }) {
     <>
       <Zeile label="Aktiver Sauerteig">{r.sauerteigGesamt} g</Zeile>
       <Zeile label="Salz">{r.salz} g</Zeile>
-      <Zeile
-        label={
-          <>
-            Kümmel <span className="muted">(optional)</span>
-          </>
-        }
-      >
-        {r.kuemmel.replace('.', ',')} TL
-      </Zeile>
+      <Zeile label={<span className="muted">ggf. Gewürze/Nüsse</span>}>{null}</Zeile>
     </>
   );
 }
@@ -230,9 +222,6 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
           </ul>
           <ol className="sd-steps">
             <li>Alles zum Autolyseteig geben und gründlich verkneten, mit feuchten Händen.</li>
-            <li>
-              Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
-            </li>
           </ol>
         </>
       ) : (
@@ -246,11 +235,17 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
           </ul>
           <ol className="sd-steps">
             <li>Alles gründlich zu einem Teig mischen, mit feuchten Händen.</li>
-            <li>
-              Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
-            </li>
           </ol>
         </>
+      );
+    case 'gare':
+      return (
+        <ol className="sd-steps">
+          <li>
+            Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
+          </li>
+          <li>Fertig, wenn der Teig sichtbar aufgegangen ist und Blasen zeigt.</li>
+        </ol>
       );
     case 'formen':
       return (
@@ -267,7 +262,7 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
       return (
         <ol className="sd-steps">
           <li>
-            Ofen auf <strong>{r.anbackTemp} °C</strong> vorheizen (30-40 Min), mittlere Schiene.
+            Ofen auf <strong>{r.ofenTemp} °C</strong> vorheizen (30-40 Min), mittlere Schiene.
           </li>
           <li>Schüssel zum Abdecken oder ein Gefäß für Wasser (Schwaden) bereitstellen.</li>
         </ol>
@@ -392,11 +387,13 @@ function Ablauf({
   melde: (text: string, art?: 'success' | 'error') => void;
 }) {
   const lauf = useLauf();
-  // Timer nur zuordnen, wenn er zu den aktuellen Einstellungen passt (gleiche Schritte).
+  // Timer nur zuordnen, wenn er zu den aktuellen Einstellungen passt (gleiche Schritte). Zahlen im Titel zählen
+  // nicht („Ofen auf 250 °C vorheizen“ ändert sich mit der Ofentemperatur, der Schritt bleibt derselbe).
+  const ohneZahlen = (t: string) => t.replace(/\d+/g, '#');
   const passt =
     !!lauf &&
     lauf.schritte.length === r.schritte.length &&
-    lauf.schritte.every((s, i) => s.titel === r.schritte[i]![1]);
+    lauf.schritte.every((s, i) => ohneZahlen(s.titel) === ohneZahlen(r.schritte[i]![1]));
   const l = passt ? lauf : null;
   const jetzt = useJetzt(!!l);
   const weiter = l ? offenAb(l) : 0;
@@ -777,7 +774,7 @@ export function Rechner({
               onChange={(v) => set({ ofenTemp: v })}
             />
             <p className="muted small" style={{ marginBottom: 0 }}>
-              Backen ohne Dampf: {r.backZeit}. Vorheizen und Dampfphase bei {r.anbackTemp} °C.
+              Backen ohne Dampf: {r.backZeit}. Dampfphase bei {r.anbackTemp} °C.
             </p>
           </div>
         </div>

@@ -59,6 +59,59 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
     pruefe(db.backlauf == nil, "beendet")
     db.starteBacklauf(l)
     pruefe(db.backlauf?.lauf == l, "neuer Lauf nach Beenden")
+
+    // Abgleich: Schnappschuss behält Feldzeiten und Löschmarken; ein zweites Gerät kommt auf denselben Stand
+    let snap = db.schnappschuss()
+    pruefe(snap.contains { $0.geloescht } && snap == snap.sorted { $0.zeit < $1.zeit }, "Schnappschuss mit Löschmarken, sortiert")
+    let db2 = Datenbank(url: nil, geraet: "iostest0002")
+    db2.wende(snap)
+    let sichtbar = { (d: Datenbank) in d.tabellen.mapValues { $0.filter { !$0.value.geloescht } } }
+    let geloescht = { (d: Datenbank) in d.tabellen.flatMap { t, z in z.filter { $0.value.geloescht }.map { "\(t)/\($0.key)" } }.sorted() }
+    pruefe(sichtbar(db2) == sichtbar(db) && geloescht(db2) == geloescht(db) && db2.aus.isEmpty, "zweites Gerät gleich, nichts ausstehend")
+    var gemeldet: [Bool] = []
+    db2.beiAenderung = { gemeldet.append($0) }
+    db2.wende(snap)
+    pruefe(gemeldet.isEmpty, "gleicher Stand meldet keine Änderung")
+    db2.schreibe("rezept", "r9", ["name": .text("Neu")])
+    pruefe(gemeldet == [false] && db2.aus.count == 1, "eigene Änderung gemeldet")
+    db2.quittiere(Set(db2.aus.map(\.zeit)))
+    pruefe(db2.aus.isEmpty && gemeldet == [false], "quittiert, ohne Meldung")
+
+    // Sicherung: Rundreise und Zusammenführen mit neuerem lokalen Stand
+    let frisch = Datenbank(url: nil, geraet: "iostest0003")
+    frisch.uebernimmSicherung(db2.sicherung()!)
+    pruefe(frisch.tabellen == db2.tabellen, "Sicherung eingespielt")
+    frisch.schreibe("rezept", "r9", ["name": .text("Später")])
+    frisch.uebernimmSicherung(db2.sicherung()!)
+    pruefe(frisch.zeile("rezept", "r9")?["name"] == .text("Später"), "neuere lokale Änderung bleibt")
+
+    // Verschlüsselung: Vektoren aus der Web-App (src/schluessel.ts), Schlüssel = Bytes 0…31
+    let k = Data((0..<32).map { UInt8($0) })
+    pruefe(Verschluesselung.kennung(k) == "630dcd2966c43366", "Kennung wie im Web")
+    let webA = Aenderung(tabelle: "rezept", uid: "u1", daten: ["x": .text("rNW/JhdQNydIRLDWwZrknSz1kCig1XNxbi2fGm3c6CSJodLhwYV2Ls4+jT9UG6ftzvU8kj7Pwj4UmsZUUSKgzHj4v96rEA==")], geloescht: false, zeit: "1763371234567-0000-webaaaaaaaa")
+    let klar = Verschluesselung.entschluessele(k, webA)
+    pruefe(klar?.daten == ["name": .text("Brot ä"), "n": .zahl(2), "b": .bool(true), "z": .null], "Web-Änderung lesbar: \(String(describing: klar))")
+    var umgehaengt = webA; umgehaengt.uid = "u2"
+    pruefe(Verschluesselung.entschluessele(k, umgehaengt) == nil, "uid an den Inhalt gebunden")
+    pruefe(Verschluesselung.entpacke("MyHNhqd/9iOmWycb3fnZjOU+lE4qxtQkhvCENgM6UnRAq24UFvuQs3pzkWuNeyiTT4ae0MRC1cUZEdosHEMpJPIzy185CIcIgo3NbQ==", geheim: "JKMNPQRS") == k, "Web-Gerätecode entpackt")
+    let eigen = try! Verschluesselung.verschluessele(k, Aenderung(tabelle: "profil", uid: "p", daten: ["a": .zahl(1.5)], geloescht: false, zeit: "1763371234567-0001-iosaaaaaaaa"))
+    pruefe(Verschluesselung.entschluessele(k, eigen)?.daten == ["a": .zahl(1.5)], "Rundreise iOS")
+    pruefe(Verschluesselung.entschluessele(Verschluesselung.neuerSchluessel(), eigen) == nil, "falscher Schlüssel")
+    let blob = try! Verschluesselung.verpacke(k, geheim: "ABCDEFGH")
+    pruefe(Verschluesselung.entpacke(blob, geheim: "ABCDEFGH") == k && Verschluesselung.entpacke(blob, geheim: "ABCDEFGJ") == nil, "Gerätecode iOS")
+    let teile = Verschluesselung.zerlegeCode("abcd-efgh jkmn-pqrs")
+    pruefe(teile.server == "ABCDEFGH" && teile.geheim == "JKMNPQRS" && Verschluesselung.zeigeCode("ABCD-EFGH", "JKMNPQRS") == "ABCD-EFGH-JKMN-PQRS", "Code zerlegen")
+    pruefe(Verschluesselung.zerlegeCode("ABCD-EFGH").geheim == nil, "Admin-Code ohne Geheimnis")
+
+    // Füttern: Stand des Glases (ruhig → gelb am Fälligkeitstag → rot ab 2 Tagen drüber)
+    let cal = Calendar.current
+    let heute = cal.date(bySettingHour: 21, minute: 0, second: 0, of: Date())!
+    func vor(_ t: Int) -> Fuetterung { Fuetterung(zuletzt: cal.date(byAdding: .day, value: -t, to: heute), intervall: 7) }
+    pruefe(Fuetterung(zuletzt: nil, intervall: 7).stand(heute: heute) == .ruhig, "nie gefüttert: ruhig")
+    pruefe(vor(6).stand(heute: heute) == .ruhig && vor(6).restTage(heute: heute) == 1, "morgen fällig: ruhig")
+    pruefe(vor(7).stand(heute: heute) == .faellig && vor(7).restTage(heute: heute) == 0, "heute fällig: gelb")
+    pruefe(vor(8).stand(heute: heute) == .faellig, "1 Tag drüber: gelb")
+    pruefe(vor(9).stand(heute: heute) == .dringend && vor(30).stand(heute: heute) == .dringend, "2+ Tage drüber: rot")
 }
 
 MainActor.assumeIsolated { laufe() }

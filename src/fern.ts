@@ -1,10 +1,11 @@
-// Push vom eigenen Server (server/server.ts) ab „Backen beginnen“: Push-Abo dieses Geräts beim Konto anmelden. Den
-// Zeitplan bekommt der Server über den Abgleich (abgleich.ts) und schickt die Meldungen an alle Geräte des Kontos;
-// hat dieses Gerät ein Abo und ist der Stand beim Server, zeigt der Browser keine eigenen Mitteilungen
-// (timer.ts, „fern“).
+// Push vom eigenen Server (server/server.ts) ab „Backen beginnen“, nur mit Konto: Push-Abo dieses Geräts und den
+// Zeitplan melden (/api/timer). Der Server schickt die Meldungen an alle Geräte des Kontos und plant neu, wenn der
+// Timer im Abgleich anders ankommt. Hat dieses Gerät ein Abo, zeigt der Browser keine eigenen Mitteilungen
+// (timer.ts, „fern“). Ohne Konto meldet der Browser selbst, solange die Seite offen ist.
 import { setzeFernPush } from './gemeinsam/timer';
 import { post } from './api';
-import { synchron } from './abgleich';
+import { kern } from './laufKern';
+import { leseKonto } from './speicher';
 
 const b64 = (s: string) => {
     const roh = atob((s + '='.repeat((4 - (s.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
@@ -49,14 +50,15 @@ export async function vergissPush(): Promise<string | undefined> {
 
 export function installiereFernPush(): void {
     setzeFernPush({
-        async plane() {
+        async plane(l) {
+            if (!leseKonto()) return false;
             const a = await abo();
             if (!a) return false;
-            const r = await post('/api/push-abo', { abo: a.toJSON() });
-            return r.ok && (await synchron());
+            const r = await post('/api/timer', { abo: a.toJSON(), lauf: kern(l) });
+            return r.ok;
         },
         async stoppe() {
-            /* das Beenden geht über den Abgleich an den Server */
+            if (leseKonto()) await post('/api/timer/stop');
         },
     });
 }

@@ -32,6 +32,7 @@ final class BackTimer: ObservableObject {
         let l = lauf
         await Mitteilungen.planeBackTimer(l)
         await BackLive.shared.abgleichen(l)
+        await Abgleich.shared.meldeZeitplan(l) // Web-Push der Browser im Konto
     }
 
     /// App im Vordergrund oder gestartet: abgelaufenen Lauf abräumen, Aktivität nachholen oder weiterschalten.
@@ -40,6 +41,9 @@ final class BackTimer: ObservableObject {
         if let l = db.backlauf?.lauf, l.abgelaufen(now) { db.beendeBacklauf() }
         await nachAenderung()
     }
+
+    /// Einstellungen für Mitteilungen oder Live-Aktivität geändert: neu planen und abgleichen.
+    func einstellungenGeaendert() async { await nachAenderung() }
 
     var letzterVorlauf: Int {
         let v = UserDefaults.standard.integer(forKey: vorlaufKey)
@@ -93,3 +97,9 @@ final class BackTimer: ObservableObject {
         await nachAenderung()
     }
 }
+
+#if DEBUG
+#Preview("Timer · reift") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .reift) }
+#Preview("Timer · Backen läuft") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .backen) }
+#Preview("Timer · fertig") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .fertig) }
+#endif

@@ -4,7 +4,7 @@ import { Offline, post, rufe, type Antwort } from './api';
 import { zeigeToast } from './ui';
 
 interface Einladung { id: number; notiz: string; erstellt: number; gueltigBis: number }
-interface Konto { id: number; name: string; erstellt: number; rezepte: number; geraete: number; zuletzt: number | null }
+interface Konto { id: number; name: string; erstellt: number; abgleich: number; geraete: number; zuletzt: number | null }
 interface Stand { einladungen: Einladung[]; konten: Konto[]; backlaeufe: number }
 interface Neu { code: string; gueltigBis: number; titel: string; link?: string }
 
@@ -164,7 +164,7 @@ export function Admin() {
                                         <strong>{k.name}</strong>
                                         <br />
                                         <span className="muted small">
-                                            {k.rezepte} Rezepte · {k.geraete} Geräte
+                                            {k.geraete} Geräte{k.abgleich ? ` · ${k.abgleich} Änderungen im Abgleich` : ''}
                                             {k.zuletzt ? ` · zuletzt ${datum(k.zuletzt)}` : ''}
                                         </span>
                                     </span>

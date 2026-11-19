@@ -1,11 +1,15 @@
 import SwiftUI
 
 /// Sauerteig füttern: zuletzt, wieder fällig, Knopf „Gefüttert“, Rhythmus ändern. Erinnerung als lokale Mitteilung
-/// am Fälligkeitstag morgens (Mitteilungen.planeFuettern).
+/// am Fälligkeitstag zur eingestellten Uhrzeit, ab 2 Tagen drüber täglich (Mitteilungen.planeFuettern, Einstellungen).
+/// Geöffnet als Popup über das Glas oben links (HauptAnsicht); `schliessen` schließt es nach „Gefüttert“.
 struct FuetternKarte: View {
+    var schliessen: (() -> Void)? = nil
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var db: Datenbank
     @State private var bearbeiten = false
+    @AppStorage(Einstellungen.fuetternMitteilungenKey) private var erinnern = true
+    @AppStorage(Einstellungen.fuetternMinuteKey) private var minute = Einstellungen.fuetternMinuteStandard
 
     private static let wochentag = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"]
 
@@ -23,7 +27,7 @@ struct FuetternKarte: View {
     var body: some View {
         let f = db.fuetterung
         let heute = Date()
-        let rest = f.faellig.map { tage(heute, $0) }
+        let rest = f.restTage(heute: heute)
         let rhythmus = f.intervall == 7 ? "jede Woche" : f.intervall == 1 ? "jeden Tag" : "alle \(f.intervall) Tage"
         Card {
             HStack {
@@ -53,9 +57,14 @@ struct FuetternKarte: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button("Gefüttert") { setze(zuletzt: Date(), intervall: f.intervall, text: "Gefüttert") }
+            Button("Gefüttert") {
+                setze(zuletzt: Date(), intervall: f.intervall, text: "Gefüttert")
+                schliessen?()
+            }
                 .buttonStyle(PrimaryButtonStyle())
-            Note("Rhythmus \(rhythmus). Ist er fällig, erinnert dich die App um \(Mitteilungen.fuetternStunde) Uhr per Mitteilung.")
+            Note(erinnern
+                 ? "Rhythmus \(rhythmus). Ist er fällig, erinnert dich die App um \(Einstellungen.uhrzeit(minute)) Uhr per Mitteilung, ab 2 Tagen drüber jeden Tag (Uhrzeit oben rechts in den Einstellungen)."
+                 : "Rhythmus \(rhythmus). Die Erinnerung per Mitteilung ist in den Einstellungen oben rechts ausgeschaltet.")
         }
         .sheet(isPresented: $bearbeiten) {
             FuetternBlatt(f: f) { zuletzt, intervall in setze(zuletzt: zuletzt, intervall: intervall, text: "Gesichert") }
@@ -112,3 +121,18 @@ private struct FuetternBlatt: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Blatt · Füttern") {
+    Color.clear.sheet(isPresented: .constant(true)) {
+        FuetternBlatt(f: Fuetterung(zuletzt: Date().addingTimeInterval(-3 * 86_400), intervall: 7)) { _, _ in }
+    }
+}
+
+// MARK: - Füttern
+
+#Preview("Füttern · nie eingetragen") { FuetternKarte().vorschauKarte().vorschau(fuettern: .nie) }
+#Preview("Füttern · in ein paar Tagen") { FuetternKarte().vorschauKarte().vorschau(fuettern: .ok) }
+#Preview("Füttern · heute fällig") { FuetternKarte().vorschauKarte().vorschau(fuettern: .heute) }
+#Preview("Füttern · überfällig") { FuetternKarte().vorschauKarte().vorschau(fuettern: .ueberfaellig) }
+#endif

@@ -30,5 +30,6 @@ export const tipps: readonly string[] = [
     'Lieber etwas früher als zu spät backen',
     'Klopftest: Fertiges Brot klingt hohl',
     'Nach dem Backen mindestens 2h auskühlen lassen',
-    'Je höher der Roggen-Anteil, desto kompakter das Brot'
+    'Je höher der Roggen-Anteil, desto kompakter das Brot',
+    'Warmer Ort für die Gare: Backofen mit eingeschalteter Lampe hat ca. 30 °C'
 ];

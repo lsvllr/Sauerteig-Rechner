@@ -54,7 +54,7 @@ struct Anleitung: View {
     private var sauerteigSalz: some View {
         zeile("Aktiver Sauerteig", "\(r.sauerteigGesamt) g")
         zeile("Salz", "\(r.salz) g")
-        zeile("Kümmel (optional)", "\(r.kuemmel.replacingOccurrences(of: ".", with: ",")) TL")
+        zeile("ggf. Gewürze/Nüsse", "")
     }
 
     private func steps(_ items: [String]) -> some View {
@@ -89,21 +89,22 @@ struct Anleitung: View {
                     Text("Zum Autolyseteig geben").font(.subheadline.weight(.bold))
                     mehle(nurRoggen: true)
                     sauerteigSalz
-                    steps(["Alles zum Autolyseteig geben und gründlich verkneten, mit feuchten Händen.",
-                           "Abgedeckt bei \(w.gareTemp) °C gehen lassen: **\(r.ersteGare)**."])
+                    steps(["Alles zum Autolyseteig geben und gründlich verkneten, mit feuchten Händen."])
                 } else {
                     mehle()
                     zeile("Warmes Wasser", "\(r.hauptteigWasser) ml")
                     sauerteigSalz
-                    steps(["Alles gründlich zu einem Teig mischen, mit feuchten Händen.",
-                           "Abgedeckt bei \(w.gareTemp) °C gehen lassen: **\(r.ersteGare)**."])
+                    steps(["Alles gründlich zu einem Teig mischen, mit feuchten Händen."])
                 }
+            case .gare:
+                steps(["Abgedeckt bei \(w.gareTemp) °C gehen lassen: **\(r.ersteGare)**.",
+                       "Fertig, wenn der Teig sichtbar aufgegangen ist und Blasen zeigt."])
             case .formen:
                 steps((w.teigTeilen ? ["Teig halbieren, je ca. \(Int(r.einzelGewicht.rounded())) g."] : [])
                       + ["Mit feuchten Händen rundwirken, in einen bemehlten Gärkorb legen.",
                          "Stückgare bei \(w.gareTemp) °C: **\(r.stueckgare)**. Fertig, wenn eine Delle nur zur Hälfte zurückfedert."])
             case .ofen:
-                steps(["Ofen auf **\(r.anbackTemp) °C** vorheizen (30-40 Min), mittlere Schiene.",
+                steps(["Ofen auf **\(r.ofenTemp) °C** vorheizen (30-40 Min), mittlere Schiene.",
                        "Schüssel zum Abdecken oder ein Gefäß für Wasser (Schwaden) bereitstellen."])
             case .backen:
                 steps(["Stürzen und kreuzförmig einschneiden.",
@@ -118,3 +119,21 @@ struct Anleitung: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Anleitungen der Schritte") {
+    let r = Vorschau.rezept
+    ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(Array(r.schritte.enumerated()), id: \.offset) { _, s in
+                Card {
+                    CardTitle(s.titel)
+                    Anleitung(art: s.art, r: r, w: Vorschau.werte)
+                }
+            }
+        }
+        .padding(Metrics.gutter)
+    }
+    .hhBackground()
+}
+#endif

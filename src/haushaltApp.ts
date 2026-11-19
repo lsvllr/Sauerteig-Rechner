@@ -5,7 +5,7 @@
 // Außerhalb der App tut sie nichts.
 import { setzeFernPush, timerStore, type Lauf } from './gemeinsam/timer';
 import { alsLauf, kern, kernText, type Kern } from './laufKern';
-import { geaendert, uebernimm } from './abgleich';
+import { geaendert, uebernimm } from './timerDaten';
 
 interface AppAntwort {
     ok?: boolean;
@@ -79,7 +79,7 @@ async function holeStand(): Promise<void> {
     if (neu && neu.erstellt > (lokal?.erstellt ?? 0) && neu.erstellt > geaendert()) {
         letzt = s; // kommt von der App, nicht zurückschicken
         antwort = Promise.resolve({ ok: true, push: neu.phase === 'backen' });
-        uebernimm(neu, neu.erstellt, true); // und an den Server
+        uebernimm(neu, neu.erstellt, true); // und in die Datenbank (Abgleich)
     } else {
         letzt = s; // App hat anderes: ihr den Stand der Seite schicken
         void anApp(lokal);

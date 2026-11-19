@@ -1,5 +1,6 @@
-// Versand an Apple Push Notification service (APNs) für die Live-Aktivität des Back-Timers der iOS-App.
-// Nur Live-Aktivitäten: Mitteilungen plant die App selbst (lokal), Web-Push läuft weiter über web-push.
+// Versand an Apple Push Notification service (APNs) für die iOS-App: Live-Aktivität des Back-Timers weiterschalten
+// und stiller Push „es gibt Neues“ für den Abgleich (weckt die App kurz, nichts sichtbar). Mitteilungen plant die
+// App selbst (lokal), Web-Push läuft weiter über web-push.
 //
 // Einrichtung (developer.apple.com > Keys > „Apple Push Notifications service“):
 //   APNS_KEY_ID    Key ID des Schlüssels
@@ -156,5 +157,21 @@ export function sendeAktivitaet(
       'apns-expiration': String(jetzt + 3600),
     },
     { aps },
+  );
+}
+
+/** Stiller Push: weckt die App im Hintergrund, damit sie Änderungen der anderen Geräte holt. Ohne Inhalt. */
+export function sendeStill(endpoint: string): Promise<Ergebnis> {
+  const jetzt = Math.floor(Date.now() / 1000);
+  return post(
+    endpoint,
+    {
+      'apns-topic': TOPIC,
+      'apns-push-type': 'background',
+      'apns-priority': '5',
+      'apns-expiration': String(jetzt + 6 * 3600),
+      'apns-collapse-id': 'abgleich',
+    },
+    { aps: { 'content-available': 1 } },
   );
 }

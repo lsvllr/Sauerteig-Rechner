@@ -421,3 +421,58 @@ enum Haptics {
     static func error() { UINotificationFeedbackGenerator().notificationOccurred(.error) }
     static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
 }
+
+#if DEBUG
+// MARK: - Bausteine
+
+#Preview("Bausteine") {
+    @Previewable @State var wert = 22
+    @Previewable @State var wahl = 10
+    ScrollView {
+        VStack(alignment: .leading, spacing: 18) {
+            Card {
+                CardTitle("Karte mit Titel", hint: "Erklärung hinter dem „i“.")
+                FactRow("Krume", "saftig, kompakt")
+                RowDivider()
+                FactRow("Haltbarkeit", "5–7 Tage")
+                Note("Hinweis in grau.")
+            }
+            Card {
+                CardTitle("Knöpfe")
+                Button("Primär") {}.buttonStyle(PrimaryButtonStyle())
+                Button("Primär schmal") {}.buttonStyle(PrimaryButtonStyle(fullWidth: false))
+                Button("Löschen") {}.buttonStyle(PrimaryButtonStyle(destructive: true))
+                HStack {
+                    Button("Sekundär") {}.buttonStyle(SecondaryButtonStyle())
+                    Button("Klein") {}.buttonStyle(SecondaryButtonStyle(small: true))
+                    Button("Gefahr") {}.buttonStyle(SecondaryButtonStyle(danger: true, small: true))
+                }
+            }
+            Card {
+                CardTitle("Pillen")
+                FlowLayout {
+                    Pill("neutral")
+                    Pill("überfällig", .overdue)
+                    Pill("heute", .today)
+                    Pill("morgen", .soon)
+                    Pill("in 3 Tagen", .ok)
+                    Pill("Aufwand", .effort, icon: "flame")
+                }
+            }
+            Card {
+                CardTitle("Eingaben")
+                Regler(label: "Sauerteig-Temperatur", wert: "\(wert) °C", value: $wert, range: 18...30, step: 1, hint: "Beispiel")
+                IntStepper(label: "Zähler", value: $wert, range: 0...40)
+                LabeledField(label: "Auswahl", hint: "Menü in Feldoptik") {
+                    MenuPicker(options: BackLauf.vorlaufWahl.map { Choice($0, $0 == 0 ? "Keine" : "\($0) Min vorher") }, selection: $wahl)
+                }
+            }
+            ToastView(toast: AppState.Toast(text: "Gesichert", art: .erfolg)) {}
+            ToastView(toast: AppState.Toast(text: "Fehlgeschlagen", art: .fehler)) {}
+            ToastView(toast: AppState.Toast(text: "Gelöscht", art: .info, rueckgaengig: {})) {}
+        }
+        .padding(Metrics.gutter)
+    }
+    .hhBackground()
+}
+#endif
