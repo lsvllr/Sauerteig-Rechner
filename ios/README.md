@@ -55,14 +55,11 @@ Weckdienst und iCloud-Sicherung.
 
 Einmalig: in App Store Connect die App mit der Bundle-ID `de.eliasvollrath.sauerteig` anlegen.
 
-- **Vom Mac:** `ios/Tools/testflight.sh` prüft den Kern, archiviert, signiert über das in Xcode angemeldete Konto
-  und lädt hoch. `--nur-bauen` legt nur das Archiv nach `ios/build/`. Mit `ASC_KEY_ID`, `ASC_ISSUER_ID`,
-  `ASC_KEY_PATH` in der Umgebung geht es auch ohne Xcode-Konto (z. B. per cron).
-- **Automatisch über GitHub Actions:** `.github/workflows/testflight.yml` baut bei jedem Push auf `main`, der
-  `ios/` ändert, und auf Knopfdruck. Braucht die Secrets `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (Team-Schlüssel,
-  Rolle „Admin“; Details im Kopf der Workflow-Datei). Ohne Secrets wird der Lauf übersprungen.
+Nur vom Mac (GitHub baut bewusst keine TestFlight-Builds): `ios/Tools/testflight.sh` prüft den Kern, archiviert,
+signiert über das in Xcode angemeldete Konto und lädt hoch. `--nur-bauen` legt nur das Archiv nach `ios/build/`.
+Mit `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_PATH` in der Umgebung geht es auch ohne Xcode-Konto.
 
-Die Build-Nummer setzen beide Wege selbst (JJMMTT.HHMM, UTC), die Version steht in `MARKETING_VERSION`. Die
+Die Build-Nummer setzt das Skript selbst (JJMMTT.HHMM, UTC), die Version steht in `MARKETING_VERSION`. Die
 Exportfrage zur Verschlüsselung beantwortet `ITSAppUsesNonExemptEncryption = NO`.
 
 ## Weckdienst am Server

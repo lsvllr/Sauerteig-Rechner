@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 NUR_BAUEN=0
 [ "${1:-}" = "--nur-bauen" ] && NUR_BAUEN=1
 
-# Build-Nummer aus Datum und Uhrzeit (UTC): steigt immer, auch gemischt mit Builds aus GitHub Actions.
+# Build-Nummer aus Datum und Uhrzeit (UTC): steigt immer.
 BUILD_NUMBER=$(date -u +%y%m%d.%H%M)
 VERSION=$(grep -E '^MARKETING_VERSION' Config/Sauerteig.xcconfig | sed 's/.*= *//')
 WORK=$(mktemp -d)
