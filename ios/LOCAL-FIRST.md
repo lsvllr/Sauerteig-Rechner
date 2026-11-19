@@ -125,7 +125,7 @@ Timer sehen sollen. Das Datenformat aus Abschnitt 3 macht ihn später ohne Umbau
 2. **„Backen beginnen“**: Phase *backen*. Alle folgenden Schritte werden ab jetzt neu gerechnet. Ab hier läuft die
    **Live-Aktivität** auf dem Sperrbildschirm und in der Dynamic Island.
 3. Zu jedem Schritt eine Mitteilung bei Fälligkeit („Jetzt: Dehnen und Falten“) und, wenn eingestellt, eine vorher
-   („In 10 Min: …“). Vorwarnung wählbar: 0, 5, 10, 15, 20, 30, 45, 60 Minuten.
+   („In 10 Min: …“). Vorwarnung wählbar: 0, 5, 10, 15, 20, 30, 45, 60 Minuten, je Gerät in den Einstellungen unter Mitteilungen.
 4. **Abhaken** in der App oder per Knopf **„Erledigt“** in der Live-Aktivität: Der Schritt gilt ab jetzt, alle
    späteren rücken um denselben Betrag mit.
 5. Nach dem letzten Schritt (aus dem Ofen) zeigt die Aktivität 2 Stunden „Auskühlen lassen“ und verschwindet dann.

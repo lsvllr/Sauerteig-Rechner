@@ -2,7 +2,7 @@ import ActivityKit
 import SwiftUI
 import UserNotifications
 
-/// Einstellungen (Zahnrad oben rechts): eine Kachel Mitteilungen (erlauben, Back-Timer, Füttern-Erinnerung mit
+/// Einstellungen (Zahnrad oben rechts): eine Kachel Mitteilungen (erlauben, Back-Timer mit Vorwarnung, Füttern-Erinnerung mit
 /// Uhrzeit, Live-Aktivität; gelten für dieses Gerät, Einstellungen), dazu Geräte verknüpfen (Abgleich)
 /// und die Sicherung in iCloud.
 struct EinstellungenBlatt: View {
@@ -18,6 +18,7 @@ struct EinstellungenBlatt: View {
     @AppStorage(Einstellungen.fuetternMitteilungenKey) private var fuetternMelden = true
     @AppStorage(Einstellungen.fuetternMinuteKey) private var fuetternMinute = Einstellungen.fuetternMinuteStandard
     @AppStorage(Einstellungen.liveAktivitaetKey) private var live = true
+    @AppStorage(Einstellungen.vorlaufKey) private var vorlauf = Einstellungen.vorlaufStandard
 
     @State private var status: UNAuthorizationStatus?
     @State private var liveErlaubt = true
@@ -56,6 +57,7 @@ struct EinstellungenBlatt: View {
         .onChange(of: phase) { _, p in if p == .active { Task { await pruefe() } } }
         .onChange(of: backMelden) { _, _ in Task { await timer.einstellungenGeaendert() } }
         .onChange(of: live) { _, _ in Task { await timer.einstellungenGeaendert() } }
+        .onChange(of: vorlauf) { _, _ in Task { await timer.vorlaufGeaendert() } }
         .onChange(of: fuetternMelden) { _, _ in planeFuettern() }
         .onChange(of: fuetternMinute) { _, _ in planeFuettern() }
     }
@@ -79,7 +81,7 @@ struct EinstellungenBlatt: View {
     /// Eine Kachel für alles, was sich meldet: Erlaubnis, Back-Timer, Füttern-Erinnerung mit Uhrzeit, Live-Aktivität.
     private var mitteilungenKarte: some View {
         Card {
-            CardTitle("Mitteilungen", hint: "Damit die App dich an die Schritte des Back-Timers und ans Füttern erinnert, auch wenn sie geschlossen ist. „Back-Timer“ meldet jeden Schritt des laufenden Back-Timers. „Füttern“ erinnert am Fälligkeitstag zur gewählten Uhrzeit und ab 2 Tagen drüber jeden Tag, bis du fütterst. Die Live-Aktivität zeigt ab „Backen beginnen“ Countdown, Fortschritt und Knopf „Erledigt“ auf dem Sperrbildschirm und in der Dynamic Island.")
+            CardTitle("Mitteilungen", hint: "Damit die App dich an die Schritte des Back-Timers und ans Füttern erinnert, auch wenn sie geschlossen ist. „Back-Timer“ meldet jeden Schritt des laufenden Back-Timers, auf Wunsch schon einige Minuten vorher. „Füttern“ erinnert am Fälligkeitstag zur gewählten Uhrzeit und ab 2 Tagen drüber jeden Tag, bis du fütterst. Die Live-Aktivität zeigt ab „Backen beginnen“ Countdown, Fortschritt und Knopf „Erledigt“ auf dem Sperrbildschirm und in der Dynamic Island.")
             switch status {
             case .none:
                 EmptyView()
@@ -102,6 +104,14 @@ struct EinstellungenBlatt: View {
             }
             RowDivider()
             Toggle("Back-Timer", isOn: $backMelden).tint(Brand().primary)
+            if backMelden {
+                HStack {
+                    Text("Vorher erinnern")
+                    Spacer()
+                    MenuPicker(options: BackLauf.vorlaufWahl.map { Choice($0, $0 == 0 ? "Nein" : "\($0) Min vorher") },
+                               selection: $vorlauf)
+                }
+            }
             RowDivider()
             Toggle("Füttern-Erinnerung", isOn: $fuetternMelden).tint(Brand().primary)
             if fuetternMelden {

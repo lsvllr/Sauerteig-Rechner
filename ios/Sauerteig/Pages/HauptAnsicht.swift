@@ -327,10 +327,13 @@ struct HauptAnsicht: View {
                                         Button { abhakenUm = i } label: { Image(systemName: "clock") }
                                             .buttonStyle(SecondaryButtonStyle())
                                             .accessibilityLabel("Andere Uhrzeit")
+                                        InfoButton(text: erledigt
+                                                   ? "Aktualisieren setzt den Schritt auf jetzt, die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen."
+                                                   : "Die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen.")
                                     }
-                                    Note(erledigt
-                                         ? "Erledigt um \(BackLauf.uhrzeit(l.schritte[i].at, jetzt: jetzt)). Aktualisieren setzt ihn auf jetzt, die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen."
-                                         : "Die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen.")
+                                    if erledigt {
+                                        Note("Erledigt um \(BackLauf.uhrzeit(l.schritte[i].at, jetzt: jetzt)).")
+                                    }
                                 }
                                 if s.art == .ansetzen {
                                     if let l {
@@ -358,8 +361,8 @@ struct HauptAnsicht: View {
                                 .frame(width: 74, alignment: .leading)
                                 VStack(alignment: .leading, spacing: 1) {
                                     HStack(spacing: 4) {
-                                        if erledigt { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Color.hhPos) }
                                         Text(s.titel).fontWeight(.semibold).foregroundStyle(i == aktiv ? Brand().accent : Color.hhInk)
+                                        if erledigt { Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(Color.hhPos) }
                                     }
                                     Text(s.dauer).font(.footnote).foregroundStyle(Color.hhMuted)
                                 }

@@ -9,8 +9,11 @@ enum Einstellungen {
     /// Uhrzeit der Füttern-Erinnerung in Minuten nach Mitternacht.
     static let fuetternMinuteKey = "einstellung-fuettern-minute"
     static let liveAktivitaetKey = "einstellung-live-aktivitaet"
+    /// Vorwarnung vor jedem Back-Schritt in Minuten (0 = keine). Alter Schlüssel, damit die letzte Wahl bleibt.
+    static let vorlaufKey = "sauerteig-vorlauf"
 
     static let fuetternMinuteStandard = 8 * 60
+    static let vorlaufStandard = 10
 
     private static func an(_ key: String) -> Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 
@@ -21,6 +24,11 @@ enum Einstellungen {
     static var fuetternMinute: Int {
         let m = UserDefaults.standard.object(forKey: fuetternMinuteKey) as? Int ?? fuetternMinuteStandard
         return (0..<24 * 60).contains(m) ? m : fuetternMinuteStandard
+    }
+
+    static var vorlauf: Int {
+        let v = UserDefaults.standard.object(forKey: vorlaufKey) as? Int ?? vorlaufStandard
+        return BackLauf.vorlaufWahl.contains(v) ? v : vorlaufStandard
     }
 
     /// „8:00“, „18:30“.

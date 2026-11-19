@@ -9,7 +9,6 @@ final class BackTimer: ObservableObject {
     @Published private(set) var lauf: BackLauf?
     private var uid: String?
     private let db: Datenbank
-    private let vorlaufKey = "sauerteig-vorlauf"
 
     init(db: Datenbank? = nil) {
         self.db = db ?? .shared
@@ -45,26 +44,23 @@ final class BackTimer: ObservableObject {
     /// Einstellungen für Mitteilungen oder Live-Aktivität geändert: neu planen und abgleichen.
     func einstellungenGeaendert() async { await nachAenderung() }
 
-    var letzterVorlauf: Int {
-        let v = UserDefaults.standard.integer(forKey: vorlaufKey)
-        return BackLauf.vorlaufWahl.contains(v) && UserDefaults.standard.object(forKey: vorlaufKey) != nil ? v : 10
-    }
-
     /// „Sauerteig angesetzt“. Rückgabe: Mitteilungen erlaubt.
     func starte(_ l: BackLauf) async -> Bool {
-        UserDefaults.standard.set(l.vorlauf, forKey: vorlaufKey)
         let ok = await Mitteilungen.erlaubnis()
         db.starteBacklauf(l)
         await nachAenderung()
         return ok
     }
 
-    func aendereVorlauf(_ v: Int) {
-        guard var l = lauf, let uid else { return }
-        UserDefaults.standard.set(v, forKey: vorlaufKey)
-        l.vorlauf = v
-        db.aendereBacklauf(uid, l)
-        Task { await nachAenderung() }
+    /// Vorwarnung in den Einstellungen geändert: Mitteilungen neu planen. Der Wert geht auch in den laufenden Lauf,
+    /// weil Web-App und Web-Push ihn von dort lesen; die Mitteilungen dieses Geräts nehmen immer die Einstellung.
+    func vorlaufGeaendert() async {
+        let v = Einstellungen.vorlauf
+        if var l = lauf, let uid, l.vorlauf != v {
+            l.vorlauf = v
+            db.aendereBacklauf(uid, l)
+        }
+        await nachAenderung()
     }
 
     func beginneBacken() { hakeAb(BackLauf.beginn) }

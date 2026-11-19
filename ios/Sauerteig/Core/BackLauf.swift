@@ -60,9 +60,11 @@ struct BackLauf: Codable, Hashable, Sendable {
         return l
     }
 
-    /// Zu meldende Zeitpunkte (lokale Mitteilungen), nur künftige.
-    func meldungen(jetzt: Double) -> [(id: String, at: Double, titel: String, text: String)] {
+    /// Zu meldende Zeitpunkte (lokale Mitteilungen), nur künftige. `vorlauf`: Vorwarnung dieses Geräts
+    /// (Einstellungen), Standard der Wert im Lauf.
+    func meldungen(jetzt: Double, vorlauf: Int? = nil) -> [(id: String, at: Double, titel: String, text: String)] {
         var out: [(String, Double, String, String)] = []
+        let vorlauf = vorlauf ?? self.vorlauf
         let v = Double(vorlauf) * Self.min
         if phase == .reifen {
             guard schritte.count > Self.beginn else { return [] }

@@ -7,20 +7,24 @@ import SwiftUI
 /// Akzentfarbe der App (die Erweiterung hat keinen Zugriff auf den Asset-Katalog der App).
 let backAkzent = Color(red: 0.310, green: 0.275, blue: 0.898)
 
-/// Sperrbildschirm und Mitteilungszentrale.
+/// Sperrbildschirm und Mitteilungszentrale. Im Always-On (gedimmt) nur der kommende Schritt mit Restzeit ohne
+/// Sekunden, alles Weitere erst auf dem aktiven Sperrbildschirm.
 struct BackSperrAnsicht: View {
     let a: BackAktivitaet
     let state: BackAktivitaet.ContentState
+    @Environment(\.isLuminanceReduced) private var gedimmt
 
     var body: some View {
         let i = state.laufend(Date())
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "timer")
-                Text(state.naechster(nach: i) == nil ? "Fertig gebacken" : "Backen läuft")
+            if !gedimmt {
+                HStack(spacing: 6) {
+                    Image(systemName: "timer")
+                    Text(state.naechster(nach: i) == nil ? "Fertig gebacken" : "Backen läuft")
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(backAkzent)
             }
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(backAkzent)
             BackSchrittInfo(a: a, state: state, i: i, kompakt: false)
         }
     }
@@ -97,9 +101,19 @@ struct BackSchrittInfo: View {
     let state: BackAktivitaet.ContentState
     let i: Int
     let kompakt: Bool
+    @Environment(\.isLuminanceReduced) private var gedimmt
 
     var body: some View {
-        if state.zeiten.indices.contains(i), let n = state.naechster(nach: i) {
+        if state.zeiten.indices.contains(i), let n = state.naechster(nach: i), gedimmt && !kompakt {
+            // Always-On: nur der kommende Schritt und die Restzeit.
+            HStack(alignment: .firstTextBaseline) {
+                Text(a.titel(n)).font(.headline).lineLimit(1)
+                Spacer(minLength: 8)
+                BackCountdown(state: state, von: i, bis: n)
+                    .font(.system(size: 30, weight: .heavy).monospacedDigit())
+                    .frame(maxWidth: 130, alignment: .trailing)
+            }
+        } else if state.zeiten.indices.contains(i), let n = state.naechster(nach: i) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -125,7 +139,9 @@ struct BackSchrittInfo: View {
         } else {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Auskühlen lassen").font(.headline)
-                Text("Mindestens 2 Stunden, erst dann anschneiden.").font(.caption).foregroundStyle(.secondary)
+                if !(gedimmt && !kompakt) {
+                    Text("Mindestens 2 Stunden, erst dann anschneiden.").font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -135,15 +151,27 @@ struct BackSchrittInfo: View {
     }
 }
 
-/// Zählt auf dem Gerät selbst herunter, ohne Updates.
+/// Zählt auf dem Gerät selbst herunter, ohne Updates. Ab iOS 18: Bei einer Stunde oder mehr nur „h:mm“, darunter
+/// „mm:ss“ (höchstens zwei Felder, der Wechsel passiert von selbst). Im Always-On (gedimmt) nie Sekunden. Unter
+/// iOS 17 gibt es dieses Format nicht, dort immer mit Sekunden.
 struct BackCountdown: View {
     let state: BackAktivitaet.ContentState
     let von: Int
     let bis: Int
+    @Environment(\.isLuminanceReduced) private var gedimmt
 
     var body: some View {
-        Text(timerInterval: BackSchrittInfo.spanne(state, von, bis), countsDown: true)
-            .multilineTextAlignment(.trailing)
+        let spanne = BackSchrittInfo.spanne(state, von, bis)
+        Group {
+            if #available(iOS 18.0, *) {
+                Text(.currentDate, format: .timer(countingDownIn: spanne.lowerBound..<spanne.upperBound,
+                                                  maxFieldCount: 2,
+                                                  maxPrecision: gedimmt ? .seconds(60) : .seconds(1)))
+            } else {
+                Text(timerInterval: spanne, countsDown: true)
+            }
+        }
+        .multilineTextAlignment(.trailing)
     }
 }
 
@@ -151,6 +179,11 @@ struct BackCountdown: View {
 #Preview("Sperrbildschirm") {
     BackSperrAnsicht(a: BackAktivitaetMuster.alle[1].a, state: BackAktivitaetMuster.alle[1].state)
         .padding(16)
+}
+#Preview("Sperrbildschirm Always-On") {
+    BackSperrAnsicht(a: BackAktivitaetMuster.alle[1].a, state: BackAktivitaetMuster.alle[1].state)
+        .padding(16)
+        .environment(\.isLuminanceReduced, true)
 }
 #Preview("Alle Varianten") { BackAktivitaetGalerie() }
 #endif

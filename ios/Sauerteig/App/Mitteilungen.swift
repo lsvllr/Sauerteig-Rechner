@@ -31,7 +31,7 @@ enum Mitteilungen {
         guard Einstellungen.backMitteilungen, let l = lauf else { return }
         let c = UNUserNotificationCenter.current()
         let jetzt = Date().timeIntervalSince1970 * 1000
-        for m in l.meldungen(jetzt: jetzt).prefix(backHoechstens) {
+        for m in l.meldungen(jetzt: jetzt, vorlauf: Einstellungen.vorlauf).prefix(backHoechstens) {
             let content = UNMutableNotificationContent()
             content.title = m.titel
             content.body = m.text

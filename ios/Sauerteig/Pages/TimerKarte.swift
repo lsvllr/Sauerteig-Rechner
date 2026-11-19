@@ -44,12 +44,6 @@ struct TimerKarte: View {
                     } else {
                         Text("Brot mindestens 2 Stunden auskühlen lassen, erst dann anschneiden.").foregroundStyle(Color.hhMuted)
                     }
-                    if !fertig {
-                        LabeledField(label: "Erinnerung vor jedem Schritt", hint: "Erinnerungen kommen als Mitteilung, auch wenn die App zu ist.") {
-                            MenuPicker(options: BackLauf.vorlaufWahl.map { Choice($0, $0 == 0 ? "Keine" : "\($0) Min vorher") },
-                                       selection: Binding(get: { l.vorlauf }, set: { timer.aendereVorlauf($0) }))
-                        }
-                    }
                 }
             }
             .task(id: sicher) {
@@ -61,17 +55,16 @@ struct TimerKarte: View {
     }
 }
 
-/// Blatt „Sauerteig angesetzt“: Startzeit (auch in der Vergangenheit) und Vorwarnung.
+/// Blatt „Sauerteig angesetzt“: Startzeit (auch in der Vergangenheit). Die Vorwarnung steht in den Einstellungen.
 struct TimerStartBlatt: View {
     let r: Berechnung
     @EnvironmentObject private var timer: BackTimer
     @EnvironmentObject private var app: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var start = Date()
-    @State private var vorlauf = 10
 
     private var vorschau: BackLauf {
-        BackLauf.neu(r.schritte, start: (start.timeIntervalSince1970 * 1000).rounded(), vorlauf: vorlauf,
+        BackLauf.neu(r.schritte, start: (start.timeIntervalSince1970 * 1000).rounded(), vorlauf: Einstellungen.vorlauf,
                      reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0))
     }
 
@@ -82,9 +75,6 @@ struct TimerStartBlatt: View {
                     DatePicker("", selection: $start, displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
                         .environment(\.locale, Locale(identifier: "de_DE"))
-                }
-                LabeledField(label: "Erinnerung vor jedem Schritt") {
-                    MenuPicker(options: BackLauf.vorlaufWahl.map { Choice($0, $0 == 0 ? "Keine" : "\($0) Min vorher") }, selection: $vorlauf)
                 }
                 let v = vorschau
                 let now = Date().timeIntervalSince1970 * 1000
@@ -113,7 +103,6 @@ struct TimerStartBlatt: View {
             }
         }
         .presentationDetents([.medium])
-        .onAppear { vorlauf = timer.letzterVorlauf }
     }
 }
 
