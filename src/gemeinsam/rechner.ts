@@ -113,12 +113,12 @@ export function berechneBrotEigenschaften(anteile: Anteile): Rezept['eigenschaft
     return { krume, geschmack, haltbarkeit };
 }
 
-/** "8-10h" / "45-60 Min" → [min, max] in Minuten */
+/** "8-10h" / "45-60 Min" / "10 Min" → [min, max] in Minuten (Einzelwert: min = max) */
 export function spanne(t: string): [number, number] {
-    const m = t.match(/(\d+)-(\d+)\s*(h|Min)/);
+    const m = t.match(/(\d+)(?:-(\d+))?\s*(h|Min)/);
     if (!m) throw new Error(`Keine Zeitspanne: ${t}`);
     const f = m[3] === 'h' ? 60 : 1;
-    return [Number(m[1]) * f, Number(m[2]) * f];
+    return [Number(m[1]) * f, Number(m[2] ?? m[1]) * f];
 }
 
 const mitte = (r: [number, number]) => Math.round((r[0] + r[1]) / 2);

@@ -93,7 +93,7 @@ final class Abgleich: ObservableObject {
             return "Keine Verbindung. Zum Verknüpfen braucht es Internet."
         }
         guard r.status == 200, let token = r.json["token"] as? String, let name = r.json["name"] as? String else {
-            return r.json["error"] as? String ?? "Das hat nicht geklappt"
+            return r.fehler
         }
         Tresor.sitzung = token
         if let geheim {
@@ -123,7 +123,7 @@ final class Abgleich: ObservableObject {
             let r = try await rufe("api/geraetecode", methode: "POST", json: ["schluessel": verpackt])
             if r.status == 401 { abgemeldet(); return .failure(FehlerText("Nicht mehr angemeldet")) }
             guard r.status == 200, let c = r.json["code"] as? String, let bis = r.json["gueltigBis"] as? Double else {
-                return .failure(FehlerText(r.json["error"] as? String ?? "Das hat nicht geklappt"))
+                return .failure(FehlerText(r.fehler))
             }
             return .success((Verschluesselung.zeigeCode(c, geheim), Date(timeIntervalSince1970: bis / 1000)))
         } catch {
@@ -139,7 +139,7 @@ final class Abgleich: ObservableObject {
             let r = try await rufe("api/schluessel", methode: "POST", json: ["code": t.server])
             guard r.status == 200, let blob = r.json["schluessel"] as? String,
                   let k = Verschluesselung.entpacke(blob, geheim: geheim) else {
-                return r.json["error"] as? String ?? "Code passt nicht"
+                return r.status == 200 ? "Code passt nicht" : r.fehler
             }
             Tresor.kontoSchluessel = k
             await gleicheAb()
@@ -153,7 +153,7 @@ final class Abgleich: ObservableObject {
     func trenne() async -> String? {
         do {
             let r = try await rufe("api/abmelden", methode: "POST", json: [:])
-            guard r.status == 200 || r.status == 401 else { return r.json["error"] as? String ?? "Das hat nicht geklappt" }
+            guard r.status == 200 || r.status == 401 else { return r.fehler }
         } catch {
             return "Keine Verbindung. Trennen geht nur online."
         }
@@ -346,6 +346,14 @@ final class Abgleich: ObservableObject {
         var status: Int
         var daten: Data
         var json: [String: Any] { (try? JSONSerialization.jsonObject(with: daten)) as? [String: Any] ?? [:] }
+        /// Fehlertext des Servers; fehlt er, kam die Antwort nicht von ihm (z. B. Cloudflare): Status und Anfang zeigen.
+        var fehler: String {
+            if let e = json["error"] as? String { return e }
+            let text = String(decoding: daten.prefix(300), as: UTF8.self)
+            print("Abgleich: HTTP \(status), Antwort: \(text)")
+            let kurz = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).prefix(80)
+            return "Das hat nicht geklappt (HTTP \(status)\(kurz.isEmpty ? "" : ": \(kurz)"))"
+        }
     }
 
     private func anfrage(_ pfad: String, timeout: TimeInterval = 20, mitSchluessel: Bool = true) throws -> URLRequest {

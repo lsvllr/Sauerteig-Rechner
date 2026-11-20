@@ -183,11 +183,13 @@ enum Rechner {
 
     /// „8-10h“ / „45-60 Min“ → Minuten [min, max].
     static func spanne(_ t: String) -> (Int, Int)? {
-        let pattern = "([0-9]+)-([0-9]+)\\s*(h|Min)"
+        // Wie spanne() in src/gemeinsam/rechner.ts: auch ein Einzelwert („10 Min“), dann min = max.
+        let pattern = "([0-9]+)(?:-([0-9]+))?\\s*(h|Min)"
         guard let re = try? NSRegularExpression(pattern: pattern),
               let m = re.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)),
-              let a = Range(m.range(at: 1), in: t), let b = Range(m.range(at: 2), in: t), let u = Range(m.range(at: 3), in: t),
-              let x = Int(t[a]), let y = Int(t[b]) else { return nil }
+              let a = Range(m.range(at: 1), in: t), let u = Range(m.range(at: 3), in: t),
+              let x = Int(t[a]) else { return nil }
+        let y = Range(m.range(at: 2), in: t).flatMap { Int(t[$0]) } ?? x
         let f = t[u] == "h" ? 60 : 1
         return (x * f, y * f)
     }
