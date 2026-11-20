@@ -74,6 +74,15 @@ final class BackTimer: ObservableObject {
         Task { await nachAenderung() }
     }
 
+    /// Ansetzzeit ändern (Standard jetzt); spätere Schritte sind danach wieder offen.
+    func setzeStart(am: Date? = nil) {
+        guard let l = lauf, let uid else { return }
+        let neu = l.setzeStart(am: ((am ?? Date()).timeIntervalSince1970 * 1000).rounded())
+        guard neu != l else { return }
+        db.aendereBacklauf(uid, neu)
+        Task { await nachAenderung() }
+    }
+
     func beende() {
         db.beendeBacklauf()
         Task { await nachAenderung() }

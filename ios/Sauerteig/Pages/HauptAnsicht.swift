@@ -10,7 +10,7 @@ struct HauptAnsicht: View {
     @State private var w = SauerteigWerte()
     @State private var geladen = false
     @State private var sichernOffen = false
-    @State private var timerOffen = false
+    @State private var ersetzenSicher = false
     @State private var einstellungenOffen = false
     @State private var fuetternOffen = false
     @State private var ausgeblendet: Set<String> = []
@@ -119,12 +119,18 @@ struct HauptAnsicht: View {
         }
         .onChange(of: w) { _, v in gespeichert = (try? JSONEncoder().encode(v)) ?? Data() }
         .sheet(isPresented: $sichernOffen) { RezeptSichernBlatt(w: w) }
-        .sheet(isPresented: $timerOffen) { TimerStartBlatt(r: r) }
         .sheet(isPresented: $einstellungenOffen) { EinstellungenBlatt() }
         .sheet(item: Binding(get: { abhakenUm.map { AbhakenZiel(i: $0) } }, set: { abhakenUm = $0?.i })) { z in
-            AbhakenUmBlatt(i: z.i, titel: r.schritte.indices.contains(z.i) ? r.schritte[z.i].titel : "") { am in
-                timer.hakeAb(z.i, am: am)
-                oeffne(z.i + 1)
+            if z.i == 0 {
+                AbhakenUmBlatt(i: 0, titel: r.schritte.first?.titel ?? "", ansetzen: true) { am in
+                    timer.setzeStart(am: am)
+                    oeffne(BackLauf.beginn)
+                }
+            } else {
+                AbhakenUmBlatt(i: z.i, titel: r.schritte.indices.contains(z.i) ? r.schritte[z.i].titel : "") { am in
+                    timer.hakeAb(z.i, am: am)
+                    oeffne(z.i + 1)
+                }
             }
         }
     }
@@ -337,10 +343,21 @@ struct HauptAnsicht: View {
                                 }
                                 if s.art == .ansetzen {
                                     if let l {
-                                        // Schon angesetzt (laufender Timer zu diesem Rezept): kein zweiter Start von hier.
-                                        Note("Angesetzt um \(BackLauf.uhrzeit(l.start, jetzt: jetzt)). Neu ansetzen geht nach „Beenden“ oben in der Timer-Karte.")
+                                        // Schon angesetzt (laufender Timer zu diesem Rezept): Zeitpunkt ändern statt neu starten.
+                                        HStack(spacing: 8) {
+                                            Button {
+                                                timer.setzeStart()
+                                                oeffne(BackLauf.beginn)
+                                            } label: { Label("Aktualisieren", systemImage: "checkmark") }
+                                                .buttonStyle(PrimaryButtonStyle(fullWidth: false))
+                                            Button { abhakenUm = i } label: { Image(systemName: "clock") }
+                                                .buttonStyle(SecondaryButtonStyle())
+                                                .accessibilityLabel("Andere Uhrzeit")
+                                            InfoButton(text: "Aktualisieren setzt das Ansetzen auf jetzt, Reife und die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen.")
+                                        }
+                                        Note("Angesetzt um \(BackLauf.uhrzeit(l.start, jetzt: jetzt)).")
                                     } else {
-                                        Button("Sauerteig angesetzt") { timerOffen = true }
+                                        Button(ersetzenSicher ? "Laufenden Timer ersetzen?" : "Sauerteig angesetzt") { setzeAn(r) }
                                             .buttonStyle(PrimaryButtonStyle(fullWidth: false))
                                     }
                                 }
@@ -379,6 +396,26 @@ struct HauptAnsicht: View {
             }
         }
         .onChange(of: aktiv) { _, a in if let a { oeffne(a) } }
+    }
+
+    /// „Sauerteig angesetzt“: Timer sofort mit jetzt starten (Zeitpunkt danach im Schritt änderbar). Läuft schon ein
+    /// Timer zu anderen Einstellungen, erst nach zweitem Tippen ersetzen.
+    private func setzeAn(_ r: Berechnung) {
+        if timer.lauf != nil && !ersetzenSicher {
+            ersetzenSicher = true
+            Task {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                ersetzenSicher = false
+            }
+            return
+        }
+        ersetzenSicher = false
+        let l = BackLauf.neu(r.schritte, start: (Date().timeIntervalSince1970 * 1000).rounded(), vorlauf: Einstellungen.vorlauf,
+                             reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0))
+        Task {
+            let ok = await timer.starte(l)
+            app.zeige(ok ? "Sauerteig angesetzt" : "Sauerteig angesetzt, ohne Mitteilungen", ok ? .erfolg : .fehler)
+        }
     }
 
     /// Schritt `i` im Ablauf aufklappen (-1 = alle zu). Ein anderer offener klappt in derselben Animation zu.

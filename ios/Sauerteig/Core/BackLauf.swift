@@ -60,6 +60,19 @@ struct BackLauf: Codable, Hashable, Sendable {
         return l
     }
 
+    /// Ansetzzeit nachträglich auf `am` setzen (Standard jetzt): Reife und alle Schritte rücken um denselben Betrag
+    /// mit. Wie beim Aktualisieren eines früheren Schritts sind die späteren danach wieder offen (Phase „reifen“).
+    func setzeStart(am: Double) -> BackLauf {
+        var l = self
+        l.phase = .reifen
+        l.weiter = nil
+        let d = am - start
+        l.start += d
+        l.reife = reife.map { $0 + d }
+        for j in l.schritte.indices { l.schritte[j].at += d }
+        return l
+    }
+
     /// Zu meldende Zeitpunkte (lokale Mitteilungen), nur künftige. `vorlauf`: Vorwarnung dieses Geräts
     /// (Einstellungen), Standard der Wert im Lauf.
     func meldungen(jetzt: Double, vorlauf: Int? = nil) -> [(id: String, at: Double, titel: String, text: String)] {

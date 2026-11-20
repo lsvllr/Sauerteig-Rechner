@@ -47,7 +47,7 @@ struct BackInselRechts: View {
     var body: some View {
         let i = state.laufend(Date())
         if let n = state.naechster(nach: i) {
-            BackCountdown(state: state, von: i, bis: n)
+            BackCountdown(state: state, von: i, bis: n, insel: true)
                 .font(.title3.weight(.bold).monospacedDigit())
                 .frame(maxWidth: 100, alignment: .trailing)
                 .padding(.trailing, 4)
@@ -75,9 +75,9 @@ struct BackKompaktRechts: View {
     var body: some View {
         let i = state.laufend(Date())
         if let n = state.naechster(nach: i) {
-            BackCountdown(state: state, von: i, bis: n)
+            BackCountdown(state: state, von: i, bis: n, insel: true)
                 .monospacedDigit()
-                .frame(maxWidth: 52)
+                .frame(maxWidth: 64)
         } else {
             Image(systemName: "checkmark").foregroundStyle(backAkzent)
         }
@@ -151,22 +151,23 @@ struct BackSchrittInfo: View {
     }
 }
 
-/// Zählt auf dem Gerät selbst herunter, ohne Updates. Ab iOS 18: Bei einer Stunde oder mehr nur „h:mm“, darunter
-/// „mm:ss“ (höchstens zwei Felder, der Wechsel passiert von selbst). Im Always-On (gedimmt) nie Sekunden. Unter
-/// iOS 17 gibt es dieses Format nicht, dort immer mit Sekunden.
+/// Zählt auf dem Gerät selbst herunter, ohne Updates. Standard: immer digital („h:mm:ss“ bzw. „mm:ss“).
+/// `insel` (Dynamic Island, ab iOS 18): bei einer Stunde oder mehr nur „h:mm“, darunter „mm:ss“ (höchstens zwei
+/// Felder, der Wechsel passiert von selbst). Genauigkeit bewusst immer eine Sekunde, sonst schreibt das Format die
+/// Einheiten aus („1 Stunde“). Unter iOS 17 gibt es dieses Format nicht, dort auch in der Insel mit Sekunden.
 struct BackCountdown: View {
     let state: BackAktivitaet.ContentState
     let von: Int
     let bis: Int
-    @Environment(\.isLuminanceReduced) private var gedimmt
+    var insel = false
 
     var body: some View {
         let spanne = BackSchrittInfo.spanne(state, von, bis)
         Group {
-            if #available(iOS 18.0, *) {
+            if insel, #available(iOS 18.0, *) {
                 Text(.currentDate, format: .timer(countingDownIn: spanne.lowerBound..<spanne.upperBound,
                                                   maxFieldCount: 2,
-                                                  maxPrecision: gedimmt ? .seconds(60) : .seconds(1)))
+                                                  maxPrecision: .seconds(1)))
             } else {
                 Text(timerInterval: spanne, countsDown: true)
             }

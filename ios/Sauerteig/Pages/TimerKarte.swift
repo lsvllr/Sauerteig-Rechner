@@ -55,91 +55,50 @@ struct TimerKarte: View {
     }
 }
 
-/// Blatt „Sauerteig angesetzt“: Startzeit (auch in der Vergangenheit). Die Vorwarnung steht in den Einstellungen.
-struct TimerStartBlatt: View {
-    let r: Berechnung
-    @EnvironmentObject private var timer: BackTimer
-    @EnvironmentObject private var app: AppState
-    @Environment(\.dismiss) private var dismiss
-    @State private var start = Date()
-
-    private var vorschau: BackLauf {
-        BackLauf.neu(r.schritte, start: (start.timeIntervalSince1970 * 1000).rounded(), vorlauf: Einstellungen.vorlauf,
-                     reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0))
-    }
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 14) {
-                LabeledField(label: "Angesetzt um") {
-                    DatePicker("", selection: $start, displayedComponents: [.date, .hourAndMinute])
-                        .labelsHidden()
-                        .environment(\.locale, Locale(identifier: "de_DE"))
-                }
-                let v = vorschau
-                let now = Date().timeIntervalSince1970 * 1000
-                if v.schritte.count > BackLauf.beginn, let ende = v.schritte.last {
-                    Note("Reif ca. \(BackLauf.uhrzeit(v.reife[0], jetzt: now))–\(BackLauf.uhrzeit(v.reife[1], jetzt: now)). Backen beginnt ca. \(BackLauf.uhrzeit(v.schritte[BackLauf.beginn].at, jetzt: now)), aus dem Ofen ca. \(BackLauf.uhrzeit(ende.at, jetzt: now)).")
-                }
-                if timer.lauf != nil { Note("Der laufende Timer wird ersetzt.") }
-                Spacer()
-            }
-            .padding(Metrics.gutter)
-            .background(Color.hhBg)
-            .navigationTitle("Sauerteig angesetzt")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                SheetClose { dismiss() }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Starten") {
-                        let l = vorschau
-                        Task {
-                            let ok = await timer.starte(l)
-                            dismiss()
-                            app.zeige(ok ? "Sauerteig angesetzt" : "Sauerteig angesetzt, ohne Mitteilungen", ok ? .erfolg : .fehler)
-                        }
-                    }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-}
-
 /// Schritt mit anderer Uhrzeit abhaken (Weiterklicken vergessen): die folgenden rücken um denselben Betrag mit.
 struct AbhakenUmBlatt: View {
     let i: Int
     let titel: String
+    /// Ansetzzeit ändern statt Schritt abhaken
+    var ansetzen = false
     var erledigt: (Date) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var am = Date()
+    @State private var inhalt: CGFloat = 0
+    @State private var bereich: CGFloat = 0
+    @State private var blatt: CGFloat = 0
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 14) {
-                LabeledField(label: "Erledigt um") {
+                LabeledField(label: ansetzen ? "Angesetzt um" : "Erledigt um") {
                     DatePicker("", selection: $am, in: ...Date(), displayedComponents: [.date, .hourAndMinute])
                         .labelsHidden()
                         .environment(\.locale, Locale(identifier: "de_DE"))
                 }
-                Note("„\(titel)“ gilt ab dieser Uhrzeit, die folgenden Schritte rücken mit.")
-                Spacer()
+                Note(ansetzen ? "Reife und Schritte rücken mit." : "„\(titel)“ gilt ab dieser Uhrzeit, die folgenden Schritte rücken mit.")
             }
             .padding(Metrics.gutter)
-            .background(Color.hhBg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { inhalt = $0 }
+            .frame(maxHeight: .infinity, alignment: .top)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { bereich = $0 }
             .navigationTitle("Andere Uhrzeit")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 SheetClose { dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Erledigt") {
+                    Button(ansetzen ? "Übernehmen" : "Erledigt") {
                         erledigt(am)
                         dismiss()
                     }
                 }
             }
         }
-        .presentationDetents([.height(280)])
+        // Navigationsleiste und unterer Rand = Blatthöhe minus Inhaltsbereich; kommen zur Inhaltshöhe dazu.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { blatt = $0 }
+        // Höhe passend zum Inhalt; ohne eigenen Hintergrund, damit das Blatt durchgehend grau bleibt.
+        .presentationDetents([.height(inhalt > 0 && blatt > bereich ? inhalt + blatt - bereich : 280)])
     }
 }
 
@@ -151,11 +110,8 @@ struct AbhakenUmBlatt: View {
 #Preview("Timer · Backen läuft") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .backen) }
 #Preview("Timer · fertig") { TimerKarte(r: Vorschau.rezept).vorschauKarte().vorschau(timer: .fertig) }
 
-#Preview("Blatt · Sauerteig angesetzt") {
-    Color.clear.sheet(isPresented: .constant(true)) { TimerStartBlatt(r: Vorschau.rezept) }.vorschau()
-}
-#Preview("Blatt · Sauerteig angesetzt, ersetzt Timer") {
-    Color.clear.sheet(isPresented: .constant(true)) { TimerStartBlatt(r: Vorschau.rezept) }.vorschau(timer: .reift)
+#Preview("Blatt · Angesetzt um") {
+    Color.clear.sheet(isPresented: .constant(true)) { AbhakenUmBlatt(i: 0, titel: "Sauerteig ansetzen", ansetzen: true) { _ in } }
 }
 #Preview("Blatt · Andere Uhrzeit") {
     Color.clear.sheet(isPresented: .constant(true)) { AbhakenUmBlatt(i: 2, titel: "Formen, Stückgare") { _ in } }
