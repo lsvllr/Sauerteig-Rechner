@@ -2,7 +2,7 @@ import ActivityKit
 import SwiftUI
 import UserNotifications
 
-/// Einstellungen (Zahnrad oben rechts): eine Kachel Mitteilungen (erlauben, Back-Timer mit Vorwarnung, Füttern-Erinnerung mit
+/// Einstellungen (Zahnrad oben rechts): Fütter-Rhythmus (gehört zu den Daten, gleicht sich ab), eine Kachel Mitteilungen (erlauben, Back-Timer mit Vorwarnung, Füttern-Erinnerung mit
 /// Uhrzeit, Live-Aktivität; gelten für dieses Gerät, Einstellungen), dazu Geräte verknüpfen (Abgleich)
 /// und die Sicherung in iCloud.
 struct EinstellungenBlatt: View {
@@ -30,11 +30,14 @@ struct EinstellungenBlatt: View {
     @State private var geraeteCode: (code: String, bis: Date)?
     @State private var trennenFragen = false
     @State private var schluesselCode = ""
+    @State private var geraeteListe: [Abgleich.VerknuepftesGeraet]?
+    @State private var entfernenFragen: Abgleich.VerknuepftesGeraet?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    fuetternKarte
                     mitteilungenKarte
                     if abgleich.verfuegbar { kontoKarte }
                     sicherungKarte
@@ -77,6 +80,24 @@ struct EinstellungenBlatt: View {
     }
 
     // MARK: Karten
+
+    /// Rhythmus fürs Füttern; ändert „Wieder fällig“ und plant die Erinnerung neu.
+    private var fuetternKarte: some View {
+        Card {
+            CardTitle("Sauerteig füttern")
+            IntStepper(label: "Rhythmus in Tagen", value: rhythmus, range: 1...60)
+            Note(db.fuetterung.intervall == 7 ? "Jede Woche." : db.fuetterung.intervall == 1 ? "Jeden Tag." : "Alle \(db.fuetterung.intervall) Tage.")
+        }
+    }
+
+    private var rhythmus: Binding<Int> {
+        Binding(
+            get: { db.fuetterung.intervall },
+            set: { n in
+                db.setzeFuetterung(zuletzt: db.fuetterung.zuletzt, intervall: n)
+                planeFuettern()
+            })
+    }
 
     /// Eine Kachel für alles, was sich meldet: Erlaubnis, Back-Timer, Füttern-Erinnerung mit Uhrzeit, Live-Aktivität.
     private var mitteilungenKarte: some View {
@@ -180,6 +201,39 @@ struct EinstellungenBlatt: View {
                         .buttonStyle(SecondaryButtonStyle())
                         .disabled(busy)
                 }
+                if let liste = geraeteListe {
+                    RowDivider()
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(liste) { g in
+                            HStack(alignment: .center, spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(g.istDieses ? "\(g.name) · dieses Gerät" : g.name)
+                                        .font(.subheadline.weight(g.istDieses ? .semibold : .regular))
+                                    Text("seit \(g.seit.formatted(date: .numeric, time: .shortened)) · zuletzt \(g.zuletztAktiv.formatted(date: .numeric, time: .shortened))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                if !g.istDieses {
+                                    Button("Entfernen", role: .destructive) { entfernenFragen = g }
+                                        .font(.subheadline)
+                                        .disabled(busy)
+                                }
+                            }
+                        }
+                    }
+                    .confirmationDialog("„\(entfernenFragen?.name ?? "")“ entfernen?", isPresented: Binding(
+                        get: { entfernenFragen != nil }, set: { if !$0 { entfernenFragen = nil } }), titleVisibility: .visible,
+                        presenting: entfernenFragen) { g in
+                        Button("Entfernen", role: .destructive) { Task { await entferne(g) } }
+                    } message: { _ in
+                        Text("Das Gerät gleicht sich dann nicht mehr ab und muss neu verknüpft werden.")
+                    }
+                } else {
+                    Button("Verknüpfte Geräte anzeigen") { Task { await ladeGeraete() } }
+                        .buttonStyle(SecondaryButtonStyle())
+                        .disabled(busy)
+                }
                 Button("Dieses Gerät trennen", role: .destructive) { trennenFragen = true }
                     .buttonStyle(SecondaryButtonStyle())
                     .disabled(busy)
@@ -256,11 +310,30 @@ struct EinstellungenBlatt: View {
         }
     }
 
+    private func ladeGeraete() async {
+        busy = true
+        defer { busy = false }
+        switch await abgleich.verknuepfteGeraete() {
+        case .success(let l): geraeteListe = l
+        case .failure(let f): AppState.shared.zeige(f.text, .fehler)
+        }
+    }
+
+    private func entferne(_ g: Abgleich.VerknuepftesGeraet) async {
+        busy = true
+        if let f = await abgleich.entferne(g) { AppState.shared.zeige(f, .fehler) } else {
+            AppState.shared.zeige("„\(g.name)“ entfernt")
+        }
+        busy = false
+        await ladeGeraete()
+    }
+
     private func trenne() async {
         busy = true
         defer { busy = false }
         if let f = await abgleich.trenne() { AppState.shared.zeige(f, .fehler) } else {
             geraeteCode = nil
+            geraeteListe = nil
             AppState.shared.zeige("Getrennt, die Daten bleiben auf diesem Gerät")
         }
     }
