@@ -1,10 +1,11 @@
-// Admin-Seite (/admin): Einladungscodes erzeugen, Konten verwalten. Passwort = Add-on-Einstellung admin_password.
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+// Admin-Seite (/admin): Einladungscodes erzeugen, Konten und ihre Sitzungen (= verknüpfte Geräte) verwalten. Passwort = Add-on-Einstellung admin_password.
+import { Fragment, useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Offline, post, rufe, type Antwort } from './api';
 import { zeigeToast } from './ui';
 
 interface Einladung { id: number; notiz: string; erstellt: number; gueltigBis: number }
-interface Konto { id: number; name: string; erstellt: number; abgleich: number; geraete: number; zuletzt: number | null }
+interface Sitzung { id: number; geraet: string; erstellt: number; zuletzt: number; push: number }
+interface Konto { id: number; name: string; erstellt: number; abgleich: number; geraete: number; zuletzt: number | null; sitzungen: Sitzung[] }
 interface Stand { einladungen: Einladung[]; konten: Konto[]; backlaeufe: number }
 interface Neu { code: string; gueltigBis: number; titel: string; link?: string }
 
@@ -16,6 +17,7 @@ export function Admin() {
     const [angemeldet, setAngemeldet] = useState<boolean | null>(null);
     const [fehler, setFehler] = useState('');
     const [neu, setNeu] = useState<Neu | null>(null);
+    const [offen, setOffen] = useState<number | null>(null);
 
     const laden = useCallback(async () => {
         try {
@@ -159,7 +161,8 @@ export function Admin() {
                         {stand.konten.length === 0 && <p className="empty">Noch keine Konten</p>}
                         <ul className="list">
                             {stand.konten.map((k) => (
-                                <li key={k.id} className="list-item">
+                                <Fragment key={k.id}>
+                                <li className="list-item">
                                     <span>
                                         <strong>{k.name}</strong>
                                         <br />
@@ -169,6 +172,10 @@ export function Admin() {
                                         </span>
                                     </span>
                                     <span className="list-right">
+                                        <button type="button" className="btn sm" aria-expanded={offen === k.id}
+                                            onClick={() => setOffen(offen === k.id ? null : k.id)}>
+                                            Geräte
+                                        </button>
                                         <button type="button" className="btn sm" onClick={() => geraetecode(k)}>Gerätecode</button>
                                         <button type="button" className="btn sm danger" onClick={() => {
                                             if (confirm(`Konto „${k.name}“ mit allen Rezepten löschen?`))
@@ -178,6 +185,24 @@ export function Admin() {
                                         </button>
                                     </span>
                                 </li>
+                                {offen === k.id && k.sitzungen.map((s) => (
+                                    <li key={`s${s.id}`} className="list-item ad-sitzung">
+                                        <span>
+                                            {s.geraet || 'Unbekanntes Gerät'}{s.push ? ' · mit Push' : ''}
+                                            <br />
+                                            <span className="muted small">seit {datum(s.erstellt)} · zuletzt {datum(s.zuletzt)}</span>
+                                        </span>
+                                        <span className="list-right">
+                                            <button type="button" className="btn sm danger" onClick={() => {
+                                                if (confirm(`Sitzung „${s.geraet || 'Unbekanntes Gerät'}“ entfernen? Das Gerät ist dann abgemeldet und muss neu verknüpft werden.`))
+                                                    void aktion(() => rufe(`/api/admin/konten/${k.id}/sitzungen/${s.id}`, 'DELETE'), 'Sitzung entfernt');
+                                            }}>
+                                                Entfernen
+                                            </button>
+                                        </span>
+                                    </li>
+                                ))}
+                                </Fragment>
                             ))}
                         </ul>
                         <p className="muted small ad-fuss">Laufende Back-Timer: {stand.backlaeufe}</p>

@@ -149,6 +149,45 @@ final class Abgleich: ObservableObject {
         }
     }
 
+    /// Ein verknüpftes Gerät des Kontos (Sitzung am Server). `diese`: dieses Gerät.
+    struct VerknuepftesGeraet: Decodable, Identifiable {
+        var id: Int
+        var geraet: String
+        var erstellt: Double
+        var zuletzt: Double
+        var diese: Int
+        var name: String { geraet.isEmpty ? "Unbekanntes Gerät" : geraet }
+        var istDieses: Bool { diese != 0 }
+        var seit: Date { Date(timeIntervalSince1970: erstellt / 1000) }
+        var zuletztAktiv: Date { Date(timeIntervalSince1970: zuletzt / 1000) }
+    }
+
+    /// Alle verknüpften Geräte des Kontos, zuletzt aktive zuerst.
+    func verknuepfteGeraete() async -> Result<[VerknuepftesGeraet], FehlerText> {
+        struct Liste: Decodable { var sitzungen: [VerknuepftesGeraet] }
+        do {
+            let r = try await rufe("api/sitzungen")
+            if r.status == 401 { abgemeldet(); return .failure(FehlerText("Nicht mehr angemeldet")) }
+            guard r.status == 200, let l = try? JSONDecoder().decode(Liste.self, from: r.daten) else { return .failure(FehlerText(r.fehler)) }
+            return .success(l.sitzungen)
+        } catch {
+            return .failure(FehlerText("Keine Verbindung"))
+        }
+    }
+
+    /// Ein anderes Gerät aus dem Konto entfernen (verloren, verkauft, alte Anmeldung). Rückgabe: Fehlertext oder nil.
+    func entferne(_ g: VerknuepftesGeraet) async -> String? {
+        do {
+            let r = try await rufe("api/sitzungen/\(g.id)", methode: "DELETE")
+            if r.status == 401 { abgemeldet(); return "Nicht mehr angemeldet" }
+            guard r.status == 200 else { return r.fehler }
+        } catch {
+            return "Keine Verbindung"
+        }
+        await gleicheAb()
+        return nil
+    }
+
     /// Dieses Gerät vom Konto trennen. Die Daten bleiben auf dem Gerät.
     func trenne() async -> String? {
         do {

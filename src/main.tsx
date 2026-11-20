@@ -17,6 +17,7 @@ import { Offline, post, rufe } from './api';
 import { installiereFernPush, meldeGeraet, vergissPush } from './fern';
 import { inHaushaltApp, installiereHaushaltApp } from './haushaltApp';
 import { installiereBlaetter, oeffneBlatt, schliesseBlatt, zeigeToast } from './ui';
+import { Sitzungen } from './sitzungen';
 import { Zugang } from './zugang';
 import { Admin } from './admin';
 
@@ -269,6 +270,7 @@ function Rezepte({ konto, setKonto }: { konto: Konto | null; setKonto: (k: Konto
                                 ) : (
                                     <button type="button" className="btn" onClick={geraetecode} disabled={busy}>Weiteres Gerät verknüpfen</button>
                                 )}
+                                <Sitzungen geaendert={() => void gleicheAb()} />
                                 <button type="button" className="btn danger" onClick={abmelden}>Dieses Gerät trennen</button>
                             </>
                         )}

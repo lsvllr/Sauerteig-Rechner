@@ -185,6 +185,26 @@ export function raeumeSitzungenAuf(jetzt = Date.now()): void {
   for (const { konto_id } of alt) if (geraete(konto_id) < 2) leereAbgleich(konto_id);
 }
 
+export interface Sitzung { id: number; geraet: string; erstellt: number; zuletzt: number; push: number; diese: number }
+
+/** Sitzungen (= verknüpfte Geräte) eines Kontos, für den Admin und für das Konto selbst. id = rowid, der Token-Hash
+ * bleibt im Server; `diese`: die Sitzung zu `token` (das fragende Gerät). `zuletzt` höchstens stündlich genau. */
+export function sitzungenVon(kontoId: number, token = ''): Sitzung[] {
+  return alle<Sitzung>(
+    `SELECT rowid AS id, geraet, erstellt, zuletzt, (push IS NOT NULL) AS push, (token_hash = ?) AS diese
+       FROM sitzungen WHERE konto_id = ? ORDER BY zuletzt DESC`,
+    token ? hash(token) : '',
+    kontoId,
+  );
+}
+
+/** Eine Sitzung entfernen (Admin oder ein anderes Gerät des Kontos): das Gerät ist abgemeldet und muss neu verknüpft werden. */
+export function entferneSitzung(kontoId: number, id: number): boolean {
+  const n = tue('DELETE FROM sitzungen WHERE rowid = ? AND konto_id = ?', id, kontoId).changes;
+  if (n && geraete(kontoId) < 2) leereAbgleich(kontoId);
+  return n > 0;
+}
+
 export function geraete(kontoId: number): number {
   return eine<{ n: number }>('SELECT COUNT(*) AS n FROM sitzungen WHERE konto_id = ?', kontoId)!.n;
 }
@@ -520,6 +540,6 @@ export function uebersicht() {
          (SELECT COUNT(*) FROM sitzungen s WHERE s.konto_id = k.id) AS geraete,
          (SELECT MAX(zuletzt) FROM sitzungen s WHERE s.konto_id = k.id) AS zuletzt
        FROM konten k ORDER BY k.name`,
-    ),
+    ).map((k) => ({ ...k, sitzungen: sitzungenVon(k.id) })),
   };
 }

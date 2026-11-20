@@ -384,6 +384,14 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     return json(res, 200, { ok: true }, { 'Set-Cookie': cookie(SITZUNG, '', 0) });
   }
 
+  // Verknüpfte Geräte des eigenen Kontos ansehen und einzelne entfernen (z. B. ein verlorenes Gerät)
+  if (pfad === '/api/sitzungen' && m === 'GET') return json(res, 200, { ok: true, sitzungen: db.sitzungenVon(konto.id, token!) });
+  const eigene = /^\/api\/sitzungen\/(\d+)$/.exec(pfad);
+  if (eigene && m === 'DELETE') {
+    if (!db.entferneSitzung(konto.id, Number(eigene[1]))) return fehler(res, 404, 'Gerät nicht gefunden');
+    return json(res, 200, { ok: true });
+  }
+
   // Gerätecode, optional mit dem verpackten Schlüssel des Kontos (verpackt mit dem geheimen Teil des Codes)
   if (pfad === '/api/geraetecode' && m === 'POST') {
     const d = await lies(req);
@@ -523,6 +531,11 @@ async function admin(req: IncomingMessage, res: ServerResponse, pfad: string, ip
   if (gc && m === 'POST') {
     if (!db.kontoExistiert(Number(gc[1]))) return fehler(res, 404, 'Konto nicht gefunden');
     return json(res, 200, { ok: true, ...db.neuerGeraetecode(Number(gc[1])) });
+  }
+  const si = /^\/api\/admin\/konten\/(\d+)\/sitzungen\/(\d+)$/.exec(pfad);
+  if (si && m === 'DELETE') {
+    if (!db.entferneSitzung(Number(si[1]), Number(si[2]))) return fehler(res, 404, 'Sitzung nicht gefunden');
+    return json(res, 200, { ok: true });
   }
   const ko = /^\/api\/admin\/konten\/(\d+)$/.exec(pfad);
   if (ko && m === 'DELETE') {

@@ -13,4 +13,5 @@
 .ad-code { margin: 6px 0; font: 700 1.6rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; text-align: center; user-select: all; word-break: break-all; }
 .ad-neu { border-color: var(--accent); }
 .ad-fuss { margin: 14px 0 10px; }
+.ad-sitzung { margin-left: 18px; background: transparent; }
 input[type=password].ad-pw { padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-ctl); font-size: max(16px, 1rem); background: var(--field); color: var(--ink); width: 100%; min-height: 46px; box-sizing: border-box; font-family: inherit; }
