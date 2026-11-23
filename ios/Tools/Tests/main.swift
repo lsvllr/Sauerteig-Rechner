@@ -103,6 +103,38 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
     pruefe(teile.server == "ABCDEFGH" && teile.geheim == "JKMNPQRS" && Verschluesselung.zeigeCode("ABCD-EFGH", "JKMNPQRS") == "ABCD-EFGH-JKMN-PQRS", "Code zerlegen")
     pruefe(Verschluesselung.zerlegeCode("ABCD-EFGH").geheim == nil, "Admin-Code ohne Geheimnis")
 
+    // Tagebuch: Name aus der Mischung, Rezepte übernehmen, fertiger Lauf → Eintrag, Vorschläge der KI
+    var wc = SauerteigWerte(); wc.mischung = "custom"; wc.custom = Anteile(roggen: 40, dinkel: 60)
+    pruefe(Backeintrag.automatischerName(SauerteigWerte()) == "Roggen Optimal", "Name aus Mischung")
+    pruefe(Backeintrag.automatischerName(wc) == "Dinkel 60 % · Roggen 40 %", "Name eigene Mischung: \(Backeintrag.automatischerName(wc))")
+    let tb = Datenbank(url: nil, geraet: "iostest0003")
+    tb.speichereRezept("Altes Brot", wc)
+    tb.uebernimmRezepte()
+    tb.uebernimmRezepte()
+    pruefe(tb.backeintraege.count == 1 && tb.backeintraege.first?.name == "Altes Brot" && tb.backeintraege.first?.werte == wc, "Rezept übernommen, einmal")
+    tb.loescheEintrag(tb.backeintraege[0].id)
+    tb.uebernimmRezepte()
+    pruefe(tb.backeintraege.isEmpty && tb.rezepte.isEmpty, "gelöschter Eintrag kommt nicht zurück")
+    let uid = tb.legeEintragAn(wc, name: "Dinkel 60 % · Roggen 40 %")
+    pruefe(tb.backeintrag(uid)?.eigenerName == "", "automatischer Name wird nicht gespeichert")
+    tb.benenneEintrag(uid, "  Sonntagsbrot ")
+    pruefe(tb.backeintrag(uid)?.name == "Sonntagsbrot", "umbenennen")
+    let lt = BackLauf.neu(r.schritte, start: 1_000_000, vorlauf: 10, reife: (480, 600)).hakeAb(BackLauf.beginn, am: 1_000_000 + 540 * 60_000)
+    tb.starteBacklauf(lt, einstellungen: wc)
+    let lu = tb.backlauf!.uid
+    pruefe(tb.eintragAusLauf(lu, lt, jetzt: lt.schritte[3].at) == nil, "nicht fertig: kein Eintrag")
+    let ende = (lt.schritte.last?.at ?? 0) + 1
+    pruefe(tb.eintragAusLauf(lu, lt, jetzt: ende) == lu && tb.eintragAusLauf(lu, lt, jetzt: ende) == lu, "fertig: Eintrag mit uid des Laufs, einmal")
+    let eb = tb.backeintrag(lu)
+    pruefe(eb?.werte == wc && eb?.verlauf == lt && eb?.reife.tatsaechlich == 540 && eb?.reife.geplant != nil, "Eintrag aus Lauf: \(String(describing: eb?.reife))")
+    pruefe(KIKontext(eb!, alle: tb.backeintraege).aktuell.schritte?[BackLauf.beginn].tatsaechlichMin == 540, "Kontext: tatsächliche Zeit")
+    let vs = [KrumenAnalyse.Vorschlag(parameter: "gareTemp", aenderung: 2.4, text: "", grund: ""),
+              KrumenAnalyse.Vorschlag(parameter: "ofenTemp", aenderung: 7, text: "", grund: ""),
+              KrumenAnalyse.Vorschlag(parameter: "hydration", aenderung: 40, text: "", grund: ""),
+              KrumenAnalyse.Vorschlag(parameter: "", aenderung: 0, text: "Fingerprobe", grund: "")]
+    let wv = SauerteigWerte().mitVorschlaegen(vs)
+    pruefe(wv.gareTemp == 32 && wv.ofenTemp == 225 && wv.hydration == 85 && wv.anstellgut == SauerteigWerte().anstellgut, "Vorschläge: gerundet und begrenzt")
+
     // Füttern: Stand des Glases (ruhig → gelb am Fälligkeitstag → rot ab 2 Tagen drüber)
     let cal = Calendar.current
     let heute = cal.date(bySettingHour: 21, minute: 0, second: 0, of: Date())!

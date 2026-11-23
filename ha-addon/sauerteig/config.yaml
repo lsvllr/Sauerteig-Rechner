@@ -29,6 +29,8 @@ options:
   apns_team_id: ""
   apns_topic: "de.eliasvollrath.sauerteig"
   apns_key: ""
+  gemini_api_key: ""
+  gemini_model: ""
 schema:
   app_url: url
   admin_password: password?
@@ -38,3 +40,5 @@ schema:
   apns_team_id: str?
   apns_topic: str?
   apns_key: password?
+  gemini_api_key: password?
+  gemini_model: str?

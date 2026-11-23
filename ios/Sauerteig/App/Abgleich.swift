@@ -251,6 +251,27 @@ final class Abgleich: ObservableObject {
         if r?.status == 200 { zeitplanGemeldet = text }
     }
 
+    // MARK: KI
+
+    /// Krume analysieren lassen (server/ki.ts): Der Server reicht Fotos und Angaben an Gemini weiter und speichert
+    /// nichts davon. Bewusste Ausnahme von der Verschlüsselung, nur auf Knopfdruck. Braucht ein Konto, damit nicht
+    /// jeder den Schlüssel am Server nutzen kann.
+    func analysiereKrume(_ body: Data) async -> Result<KrumenAnalyse, FehlerText> {
+        guard konto != nil else { return .failure(FehlerText("Die Analyse braucht ein Konto (Einstellungen → Geräte verknüpfen)")) }
+        do {
+            let r = try await rufe("api/ki/krume", methode: "POST", daten: body, timeout: 120)
+            if r.status == 401 { abgemeldet(); return .failure(FehlerText("Nicht mehr angemeldet")) }
+            guard r.status == 200 else { return .failure(FehlerText(r.fehler)) }
+            struct AnalyseAntwort: Decodable { var analyse: KrumenAnalyse }
+            guard let a = try? JSONDecoder().decode(AnalyseAntwort.self, from: r.daten) else {
+                return .failure(FehlerText("Antwort der KI nicht lesbar"))
+            }
+            return .success(a.analyse)
+        } catch {
+            return .failure(FehlerText("Keine Verbindung"))
+        }
+    }
+
     // MARK: Abgleich
 
     /// App im Vordergrund: jetzt abgleichen, Live-Verbindung halten und jede Minute nachsehen; im Hintergrund nicht.
@@ -406,8 +427,8 @@ final class Abgleich: ObservableObject {
     }
 
     private func rufe(_ pfad: String, methode: String = "GET", json: [String: Any]? = nil, daten: Data? = nil,
-                      mitSchluessel: Bool = true) async throws -> Antwort {
-        var req = try anfrage(pfad, mitSchluessel: mitSchluessel)
+                      mitSchluessel: Bool = true, timeout: TimeInterval = 20) async throws -> Antwort {
+        var req = try anfrage(pfad, timeout: timeout, mitSchluessel: mitSchluessel)
         req.httpMethod = methode
         if let body = daten ?? json.flatMap({ try? JSONSerialization.data(withJSONObject: $0) }) {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

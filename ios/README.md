@@ -24,6 +24,17 @@ Server, ohne Konto und ohne Ladeanzeige. Umgesetzt sind die Stufen 1–5 aus Abs
    neu und schaltet die Live-Aktivität weiter. iOS liefert stille Pushs nach eigenem Ermessen (Akku, Häufigkeit);
    beim Öffnen holt die App ohnehin.
 
+6. **Backtagebuch** (Tab „Tagebuch“, `Core/Tagebuch.swift`, `Pages/TagebuchAnsicht.swift`): Jedes gesicherte Rezept
+   und jedes fertig gebackene Brot (Timer bis zum Ende, dann „Schließen“) ist ein Eintrag mit allen Einstellungen,
+   Mengen und tatsächlichen Zeiten. Name aus der Mehlmischung, auf Wunsch eigener. Bewertung (gesamt und Krume,
+   Kruste, Ofentrieb, Geschmack), Notiz, bis zu 8 Fotos (nur auf dem Gerät, `App/Bilder.swift`; noch nicht im
+   Abgleich und nicht in der iCloud-Sicherung). „Nochmal backen“ lädt die Einstellungen in den Rechner. Alte
+   Rezepte (Tabelle `rezept`, auch aus der Web-App) übernimmt die App einmal als Einträge.
+7. **KI-Analyse der Krume:** Auf Knopfdruck gehen bis zu 3 Fotos und die Angaben zum Backen (dazu bis zu 3 frühere
+   derselben Mischung) an `/api/ki/krume` (`server/ki.ts`). Der Server fragt Gemini mit festem Antwortschema und
+   speichert nichts. Vorschläge, die eine Einstellung ändern, übernimmt „Mit Verbesserungen laden“. Braucht ein
+   Konto und `gemini_api_key` im Add-on.
+
 Dazu die **Sicherung in iCloud** (`App/Sicherung.swift`): die Tabellen als ein Datensatz in der privaten
 CloudKit-Datenbank des Nutzers. Beim Öffnen einspielen (je Feld gewinnt die spätere Zeit), nach Änderungen und
 beim Wechsel in den Hintergrund sichern. Nach Neuinstallation oder auf einem neuen iPhone kommt so alles zurück.

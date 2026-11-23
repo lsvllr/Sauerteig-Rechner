@@ -18,6 +18,7 @@ import webpush from 'web-push';
 import { BEGINN, VORLAUF_WAHL, faellig, type Lauf } from '../src/gemeinsam/timer';
 import * as apns from './apns';
 import * as db from './db';
+import * as ki from './ki';
 import * as wecker from './wecker';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -29,7 +30,9 @@ const CLIENT_IP_HEADER = (process.env.CLIENT_IP_HEADER ?? '').toLowerCase();
 const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
 const TAKT = 10_000;
 const MAX_BODY = 16_000;
-const MAX_BODY_IMPORT = 400_000;
+/** Senden im Abgleich: bis zu 500 Änderungen je Anfrage; Tagebuch-Einträge (Notiz, Analyse, Verlauf) sind größer
+ *  als Rezepte, beim ersten Senden eines Geräts kommen viele auf einmal. */
+const MAX_BODY_SENDEN = 8_000_000;
 const SITZUNG = 'sd_sitzung';
 const ADMIN = 'sd_admin';
 const ADMIN_DAUER = 12 * 3600_000;
@@ -98,7 +101,9 @@ function pruefeName(v: unknown): string | null {
 
 /* --------------------------------------------------------------- Abgleich */
 
-const TABELLEN = new Set(['rezept', 'profil', 'backlauf']);
+// `backeintrag`: Backtagebuch der iOS-App (ios/Sauerteig/Core/Tagebuch.swift); ältere Apps und die Web-App
+// speichern unbekannte Tabellen nur mit und zeigen sie nicht.
+const TABELLEN = new Set(['rezept', 'profil', 'backlauf', 'backeintrag']);
 const UID = /^[A-Za-z0-9-]{1,64}$/;
 const ZEIT = /^(\d{13})-[0-9a-f]{4}-[A-Za-z0-9_]{8,64}$/;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -453,7 +458,7 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     return json(res, 200, { ok: true });
   }
   if (pfad === '/api/sync/senden' && m === 'POST') {
-    const d = await lies(req, MAX_BODY_IMPORT);
+    const d = await lies(req, MAX_BODY_SENDEN);
     const jetzt = Date.now();
     const k = db.kennung(konto.id);
     const geraete = db.geraete(konto.id);
@@ -466,6 +471,15 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     if (!r.ok) return fehler(res, 413, r.fehler);
     if (r.wert > 0) benachrichtige(konto.id, token!);
     return json(res, 200, { ok: true, kennung: k, geraete, angenommen: true });
+  }
+
+  // KI-Analyse der Krume (server/ki.ts): Fotos und Angaben gehen an Gemini, gespeichert wird nichts.
+  if (pfad === '/api/ki/krume' && m === 'POST') {
+    if (!ki.aktiv()) return fehler(res, 503, 'Die KI-Analyse ist auf dem Server nicht eingerichtet');
+    const a = ki.pruefeAnfrage(await lies(req, ki.MAX_BODY_KI));
+    if (!a) return fehler(res, 400, 'Fotos oder Angaben ungültig');
+    const r = await ki.analysiere(konto.id, a);
+    return r.ok ? json(res, 200, { ok: true, analyse: r.analyse }) : fehler(res, r.status, r.fehler);
   }
 
   // Push für die Web-App: Zeitplan ab „Backen beginnen“ (mit dem Abo dieses Browsers, oder ohne von einem

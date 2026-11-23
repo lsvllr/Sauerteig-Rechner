@@ -10,7 +10,7 @@ struct SauerteigApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HauptAnsicht()
+            Wurzel()
                 .environmentObject(app)
                 .environmentObject(db)
                 .environmentObject(BackTimer.shared)
@@ -23,6 +23,7 @@ struct SauerteigApp: App {
             Abgleich.shared.vordergrund(p == .active)
             if p == .background { Sicherung.shared.imHintergrund() }
             guard p == .active else { return }
+            Datenbank.shared.uebernimmRezepte()
             Task {
                 await BackTimer.shared.aufwachen()
                 await Mitteilungen.planeFuettern(Datenbank.shared.fuetterung)
@@ -42,6 +43,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             Task { @MainActor in
                 Sicherung.shared.vormerken()
                 if fremd {
+                    Datenbank.shared.uebernimmRezepte() // Rezept aus der Web-App → Tagebuch
                     await BackTimer.shared.aufwachen()
                     await Mitteilungen.planeFuettern(Datenbank.shared.fuetterung)
                 } else {
@@ -101,5 +103,5 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 }
 
 #if DEBUG
-#Preview("App") { HauptAnsicht().vorschau(timer: .backen, rezepte: true) }
+#Preview("App") { Wurzel().vorschau(timer: .backen, rezepte: true) }
 #endif

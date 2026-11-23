@@ -110,10 +110,13 @@ extension Datenbank {
             .map { ($0.0, $0.1) }
     }
 
-    /// Neuer Lauf: alte beenden (Löschmarken), neue Zeile.
-    func starteBacklauf(_ l: BackLauf) {
+    /// Neuer Lauf: alte beenden (Löschmarken), neue Zeile. `einstellungen` (Feld nur der iOS-App, die Web-App
+    /// übergeht es): daraus wird am Ende der Eintrag im Tagebuch.
+    func starteBacklauf(_ l: BackLauf, einstellungen: SauerteigWerte? = nil) {
         for (uid, _) in zeilen(BackLauf.tabelle) { loesche(BackLauf.tabelle, uid) }
-        schreibe(BackLauf.tabelle, UUID().uuidString.lowercased(), l.felder)
+        var f = l.felder
+        if let einstellungen { f["einstellungen"] = .json(einstellungen.einstellungen) }
+        schreibe(BackLauf.tabelle, UUID().uuidString.lowercased(), f)
     }
 
     func aendereBacklauf(_ uid: String, _ l: BackLauf) { schreibe(BackLauf.tabelle, uid, l.felder) }
@@ -127,5 +130,5 @@ extension Datenbank {
 import SwiftUI
 
 #Preview("Füttern · überfällig") { FuetternKarte().vorschauKarte().vorschau(fuettern: .ueberfaellig) }
-#Preview("Gespeicherte Rezepte") { HauptAnsicht().vorschau(rezepte: true) }
+#Preview("Tagebuch") { TagebuchAnsicht().vorschau(rezepte: true) }
 #endif

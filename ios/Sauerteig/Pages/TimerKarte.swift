@@ -4,6 +4,7 @@ import SwiftUI
 struct TimerKarte: View {
     let r: Berechnung
     @EnvironmentObject private var timer: BackTimer
+    @EnvironmentObject private var app: AppState
     @State private var sicher = false
 
     var body: some View {
@@ -20,7 +21,11 @@ struct TimerKarte: View {
                                   hint: reifen ? "„Backen beginnen“ tippen, sobald der Sauerteig reif ist (Blasen, leicht gewölbt, säuerlicher Geruch). Ab dann laufen die Schritte mit Erinnerungen und auf dem Sperrbildschirm." : "")
                         Spacer()
                         Button(fertig ? "Schließen" : (sicher ? "Wirklich beenden?" : "Beenden")) {
-                            if sicher || fertig { timer.beende(); sicher = false } else { sicher = true }
+                            if sicher || fertig {
+                                sicher = false
+                                // Fertig gebacken: gleich im Tagebuch bewerten
+                                if let e = timer.beende(), fertig { app.oeffneEintrag(e, bewerten: true) }
+                            } else { sicher = true }
                         }
                         .buttonStyle(SecondaryButtonStyle(danger: sicher, small: true))
                     }
@@ -43,6 +48,7 @@ struct TimerKarte: View {
                             .contentTransition(.numericText())
                     } else {
                         Text("Brot mindestens 2 Stunden auskühlen lassen, erst dann anschneiden.").foregroundStyle(Color.hhMuted)
+                        Note("„Schließen“ legt das Backen im Tagebuch ab. Dort kannst du es bewerten, Fotos hinzufügen und die Krume analysieren lassen.")
                     }
                 }
             }

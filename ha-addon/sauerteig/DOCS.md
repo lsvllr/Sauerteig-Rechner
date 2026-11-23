@@ -31,6 +31,13 @@ der Admin für ein Konto.
   `apns_key` = Inhalt der `.p8`-Datei (alternativ die Datei als `/data/apns.p8` ablegen). Leer: Die Aktivität
   schaltet nur weiter, solange die App läuft; Mitteilungen kommen trotzdem (die plant das iPhone selbst).
 
+- **gemini_api_key**: Schlüssel für die KI-Analyse der Krume im Backtagebuch der iOS-App (aistudio.google.com →
+  „Get API key“). Die App schickt auf Knopfdruck Fotos vom Anschnitt und die Angaben zum Backen; der Server reicht
+  sie an Google Gemini weiter und speichert nichts davon. Nur für angemeldete Konten, höchstens 30 Analysen je Konto
+  und Tag. Leer: Die Analyse ist aus, alles andere geht weiter.
+- **gemini_model**: Modell für die Analyse, leer = `gemini-3.8-flash`. Nur ändern, wenn Google das Modell
+  abkündigt (Liste unter ai.google.dev/gemini-api/docs/models).
+
 Nach dem Ändern speichern und das Add-on neu starten.
 
 ## Daten

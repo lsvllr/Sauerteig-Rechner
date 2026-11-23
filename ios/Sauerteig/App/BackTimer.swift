@@ -37,17 +37,20 @@ final class BackTimer: ObservableObject {
     /// App im Vordergrund oder gestartet: abgelaufenen Lauf abräumen, Aktivität nachholen oder weiterschalten.
     /// Außerdem nach Änderungen von außen (Abgleich, später).
     func aufwachen() async {
-        if let l = db.backlauf?.lauf, l.abgelaufen(now) { db.beendeBacklauf() }
+        if let x = db.backlauf, x.lauf.abgelaufen(now) {
+            db.eintragAusLauf(x.uid, x.lauf, jetzt: now)
+            db.beendeBacklauf()
+        }
         await nachAenderung()
     }
 
     /// Einstellungen für Mitteilungen oder Live-Aktivität geändert: neu planen und abgleichen.
     func einstellungenGeaendert() async { await nachAenderung() }
 
-    /// „Sauerteig angesetzt“. Rückgabe: Mitteilungen erlaubt.
-    func starte(_ l: BackLauf) async -> Bool {
+    /// „Sauerteig angesetzt“ mit den Einstellungen `w` (für den Eintrag im Tagebuch). Rückgabe: Mitteilungen erlaubt.
+    func starte(_ l: BackLauf, werte w: SauerteigWerte? = nil) async -> Bool {
         let ok = await Mitteilungen.erlaubnis()
-        db.starteBacklauf(l)
+        db.starteBacklauf(l, einstellungen: w)
         await nachAenderung()
         return ok
     }
@@ -83,9 +86,13 @@ final class BackTimer: ObservableObject {
         Task { await nachAenderung() }
     }
 
-    func beende() {
+    /// Lauf beenden. War er fertig gebacken, steht er danach im Tagebuch; Rückgabe: uid des Eintrags.
+    @discardableResult
+    func beende() -> String? {
+        let eintrag = db.backlauf.flatMap { db.eintragAusLauf($0.uid, $0.lauf, jetzt: now) }
         db.beendeBacklauf()
         Task { await nachAenderung() }
+        return eintrag
     }
 
     /// Knopf „Erledigt“ in der Live-Aktivität (BackAbhakenIntent): Schritt `schritt` (Index ab „Backen beginnt“) jetzt

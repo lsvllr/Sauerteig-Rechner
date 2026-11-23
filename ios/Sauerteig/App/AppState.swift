@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     static let shared = AppState()
 
     enum Ziel: String { case timer, fuettern }
+    enum Tab: Hashable { case backen, tagebuch }
 
     struct Toast: Identifiable, Equatable {
         let id = UUID()
@@ -24,11 +25,36 @@ final class AppState: ObservableObject {
     @Published var toast: Toast?
     /// Wohin die Seite scrollen soll (einmalig, danach `nil`).
     @Published var ziel: Ziel?
+    @Published var tab: Tab = .backen
+    /// Einstellungen, die der Rechner übernehmen soll (Tagebuch → Backen; einmalig, danach `nil`).
+    @Published var laden: SauerteigWerte?
+    /// Eintrag, den das Tagebuch öffnen soll (einmalig, danach `nil`).
+    @Published var eintrag: String?
+    /// Der geöffnete Eintrag fragt gleich nach der Bewertung (nach „Fertig gebacken“).
+    @Published var bewerten = false
 
-    /// `sauerteig://backtimer`, `/backen` → Timer; `/fuettern` → Füttern.
+    /// `sauerteig://backtimer`, `/backen` → Timer; `/fuettern` → Füttern; `/tagebuch` → Tagebuch.
     func open(link: String) {
         let pfad = link.replacingOccurrences(of: "sauerteig://", with: "/")
+        if pfad.hasPrefix("/tagebuch") {
+            tab = .tagebuch
+            return
+        }
+        tab = .backen
         if pfad.hasPrefix("/fuettern") { ziel = .fuettern } else { ziel = .timer }
+    }
+
+    /// Einstellungen in den Rechner laden und zum Tab „Backen“ wechseln.
+    func lade(_ w: SauerteigWerte, _ text: String) {
+        laden = w
+        tab = .backen
+        zeige(text)
+    }
+
+    func oeffneEintrag(_ uid: String, bewerten: Bool = false) {
+        self.bewerten = bewerten
+        eintrag = uid
+        tab = .tagebuch
     }
 
     func zeige(_ text: String, _ art: Toast.Art = .erfolg, rueckgaengig: (() -> Void)? = nil) {
@@ -59,6 +85,25 @@ final class AppState: ObservableObject {
             if !abgebrochen { endgueltig() }
         }
     }
+}
+
+/// Hinweis unten über dem Inhalt eines Tabs (über der Tab-Leiste).
+private struct ToastUnten: ViewModifier {
+    @EnvironmentObject private var app: AppState
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            if let t = app.toast {
+                ToastView(toast: t) { withAnimation(Metrics.exit) { app.toast = nil } }
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+    }
+}
+
+extension View {
+    func toastUnten() -> some View { modifier(ToastUnten()) }
 }
 
 /// Hinweis unten mit optionalem „Rückgängig“.

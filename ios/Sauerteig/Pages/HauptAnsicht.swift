@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Die eine Seite der App: Timer, Füttern, Rechner, gespeicherte Rezepte, Ablauf. Alles lokal gerechnet und
-/// gespeichert, ohne Ladeanzeige.
+/// Tab „Backen“: Timer, Füttern, Rechner, Ablauf. Alles lokal gerechnet und gespeichert, ohne Ladeanzeige.
+/// Gesicherte Rezepte und gebackene Brote liegen im Tab „Tagebuch“ (Pages/TagebuchAnsicht.swift).
 struct HauptAnsicht: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var db: Datenbank
@@ -13,7 +13,6 @@ struct HauptAnsicht: View {
     @State private var ersetzenSicher = false
     @State private var einstellungenOffen = false
     @State private var fuetternOffen = false
-    @State private var ausgeblendet: Set<String> = []
     @State private var offen: Int = 0
     @State private var abhakenUm: Int?
 
@@ -105,19 +104,15 @@ struct HauptAnsicht: View {
                 }
             }
         }
-        .overlay(alignment: .bottom) {
-            if let t = app.toast {
-                ToastView(toast: t) { withAnimation(Metrics.exit) { app.toast = nil } }
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
+        .toastUnten()
         .onAppear {
             guard !geladen else { return }
             geladen = true
             if let v = try? JSONDecoder().decode(SauerteigWerte.self, from: gespeichert) { w = v }
+            uebernimmGeladene()
         }
         .onChange(of: w) { _, v in gespeichert = (try? JSONEncoder().encode(v)) ?? Data() }
+        .onChange(of: app.laden) { _, _ in uebernimmGeladene() }
         .sheet(isPresented: $sichernOffen) { RezeptSichernBlatt(w: w) }
         .sheet(isPresented: $einstellungenOffen) { EinstellungenBlatt() }
         .sheet(item: Binding(get: { abhakenUm.map { AbhakenZiel(i: $0) } }, set: { abhakenUm = $0?.i })) { z in
@@ -133,6 +128,13 @@ struct HauptAnsicht: View {
                 }
             }
         }
+    }
+
+    /// Aus dem Tagebuch geladen: in den Rechner übernehmen.
+    private func uebernimmGeladene() {
+        guard geladen, let v = app.laden else { return }
+        w = v
+        app.laden = nil
     }
 
     /// Oberkante der Karte unter der Mitte des Glases (rund 24 pt von links bei einer iPhone-Kartenbreite um
@@ -178,7 +180,6 @@ struct HauptAnsicht: View {
         let a = w.anteile
         let mix = SauerteigDaten.mischung(w.mischung)
         let summe = Sorte.allCases.reduce(0) { $0 + w.custom[$1] }
-        let rezepte = db.rezepte.filter { !ausgeblendet.contains($0.id) }
         return Card {
             Text("Brotauswahl").font(.headline)
             LabeledField(label: "Mischung") {
@@ -231,35 +232,13 @@ struct HauptAnsicht: View {
                     }
                 }
             }
-            if !rezepte.isEmpty {
-                Text("Gespeicherte Rezepte").font(.subheadline.weight(.bold)).padding(.top, 8)
-                ForEach(rezepte) { rez in
-                    HStack {
-                        Button {
-                            w = rez.werte
-                            app.zeige("„\(rez.name)“ geladen")
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(rez.name).fontWeight(.semibold).foregroundStyle(Color.hhInk)
-                                Text(rez.datum).font(.footnote).foregroundStyle(Color.hhMuted)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.plain)
-                        Button(role: .destructive) {
-                            app.loescheMitRueckgaengig("Rezept gelöscht",
-                                                       ausblenden: { _ = withAnimation(Metrics.move) { ausgeblendet.insert(rez.id) } },
-                                                       zurueck: { _ = withAnimation(Metrics.move) { ausgeblendet.remove(rez.id) } },
-                                                       endgueltig: { db.loescheRezept(rez.id) })
-                        } label: { Image(systemName: "trash").frame(width: 44, height: 44) }
-                            .foregroundStyle(Color.hhMuted)
-                            .accessibilityLabel("„\(rez.name)“ löschen")
-                    }
-                }
+            HStack(spacing: 8) {
+                Button { sichernOffen = true } label: { Label("Im Tagebuch sichern", systemImage: "book") }
+                    .buttonStyle(SecondaryButtonStyle())
+                Button { app.tab = .tagebuch } label: { Text("Rezept laden") }
+                    .buttonStyle(SecondaryButtonStyle())
             }
-            Button { sichernOffen = true } label: { Label("Rezept sichern", systemImage: "square.and.arrow.down") }
-                .buttonStyle(SecondaryButtonStyle())
-                .padding(.top, 6)
+            .padding(.top, 6)
         }
     }
 
@@ -413,7 +392,7 @@ struct HauptAnsicht: View {
         let l = BackLauf.neu(r.schritte, start: (Date().timeIntervalSince1970 * 1000).rounded(), vorlauf: Einstellungen.vorlauf,
                              reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0))
         Task {
-            let ok = await timer.starte(l)
+            let ok = await timer.starte(l, werte: w)
             app.zeige(ok ? "Sauerteig angesetzt" : "Sauerteig angesetzt, ohne Mitteilungen", ok ? .erfolg : .fehler)
         }
     }
@@ -470,39 +449,40 @@ private struct AbhakenZiel: Identifiable {
     var id: Int { i }
 }
 
-/// Rezept sichern: Name, gespeichert auf dem Gerät.
+/// Im Tagebuch sichern: Name aus der Mehlmischung, auf Wunsch eigener.
 private struct RezeptSichernBlatt: View {
     let w: SauerteigWerte
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var db: Datenbank
     @Environment(\.dismiss) private var dismiss
-    @State private var name = "Mein Sauerteigbrot"
+    @State private var name = ""
 
     var body: some View {
+        let auto = Backeintrag.automatischerName(w)
         NavigationStack {
             VStack(alignment: .leading, spacing: 14) {
-                LabeledField(label: "Name", hint: "Gesichert auf diesem Gerät. Laden unter „Brotauswahl“.") {
-                    TextField("", text: $name).textFieldStyle(.hh)
+                LabeledField(label: "Name", hint: "Leer lassen: Name aus der Mehlmischung. Laden im Tab „Tagebuch“.") {
+                    TextField(auto, text: $name).textFieldStyle(.hh)
                 }
+                Note("Gesichert mit allen Einstellungen und Mengen. Wird ein Back-Timer fertig, legt die App das Backen von selbst im Tagebuch ab.")
                 Spacer()
             }
             .padding(Metrics.gutter)
             .background(Color.hhBg)
-            .navigationTitle("Rezept sichern")
+            .navigationTitle("Im Tagebuch sichern")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 SheetClose { dismiss() }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") {
-                        db.speichereRezept(name, w)
+                        db.legeEintragAn(w, name: name)
                         dismiss()
-                        app.zeige("Rezept gesichert")
+                        app.zeige("Im Tagebuch gesichert")
                     }
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
         }
-        .presentationDetents([.height(260)])
+        .presentationDetents([.height(300)])
     }
 }
 
@@ -518,7 +498,7 @@ private struct RezeptSichernBlatt: View {
 #Preview("Seite · Backen läuft") { HauptAnsicht().vorschau(timer: .backen) }
 #Preview("Seite · Fertig gebacken") { HauptAnsicht().vorschau(timer: .fertig) }
 #Preview("Seite · Hinweis") {
-    HauptAnsicht().vorschau(toast: AppState.Toast(text: "Rezept gesichert", art: .erfolg))
+    HauptAnsicht().vorschau(toast: AppState.Toast(text: "Im Tagebuch gesichert", art: .erfolg))
 }
 #Preview("Seite · Rückgängig") {
     HauptAnsicht().vorschau(toast: AppState.Toast(text: "Rezept gelöscht", art: .info, rueckgaengig: {}))
