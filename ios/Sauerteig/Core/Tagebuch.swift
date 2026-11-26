@@ -117,11 +117,10 @@ struct KrumenAnalyse: Codable, Hashable, Sendable {
 
 /// Einstellungen am Rechner, die die KI ändern darf. Bereiche und Schritte wie die Regler der Hauptansicht.
 enum Stellgroesse: String, CaseIterable, Sendable {
-    case anstellgut, sauerteigTemp, gareTemp, brotGroesse, hydration, ofenTemp
+    case sauerteigTemp, gareTemp, brotGroesse, hydration, ofenTemp
 
     var name: String {
         switch self {
-        case .anstellgut: return "Anstellgut"
         case .sauerteigTemp: return "Sauerteig-Temperatur"
         case .gareTemp: return "Gare-Temperatur"
         case .brotGroesse: return "Teiggewicht"
@@ -132,7 +131,7 @@ enum Stellgroesse: String, CaseIterable, Sendable {
 
     var einheit: String {
         switch self {
-        case .anstellgut, .brotGroesse: return "g"
+        case .brotGroesse: return "g"
         case .sauerteigTemp, .gareTemp, .ofenTemp: return "°C"
         case .hydration: return "%"
         }
@@ -140,7 +139,6 @@ enum Stellgroesse: String, CaseIterable, Sendable {
 
     var bereich: ClosedRange<Int> {
         switch self {
-        case .anstellgut: return 30...200
         case .sauerteigTemp: return 18...32
         case .gareTemp: return 20...32
         case .brotGroesse: return 600...2000
@@ -159,7 +157,6 @@ enum Stellgroesse: String, CaseIterable, Sendable {
 
     var pfad: WritableKeyPath<SauerteigWerte, Int> {
         switch self {
-        case .anstellgut: return \.anstellgut
         case .sauerteigTemp: return \.sauerteigTemp
         case .gareTemp: return \.gareTemp
         case .brotGroesse: return \.brotGroesse
@@ -366,6 +363,10 @@ struct KIKontext: Codable, Sendable {
         var kriterien: [String: Int]?
         var notiz: String?
         var fruehereDiagnose: String?
+        /// Mehl des Sauerteigs: roggen, weizen oder dinkel
+        var sauerteig: String? = nil
+        /// Anstellgut : Mehl : Wasser beim Ansetzen: kraeftig, normal oder mild
+        var verhaeltnis: String? = nil
     }
 
     var aktuell: Backen
@@ -402,7 +403,7 @@ struct KIKontext: Codable, Sendable {
             reifeGeplantMin: reife.geplant.map { [$0.0, $0.1] }, reifeTatsaechlichMin: reife.tatsaechlich,
             schritte: schritte, bewertung: e.bewertung > 0 ? e.bewertung : nil, kriterien: krit.isEmpty ? nil : krit,
             notiz: e.notiz.isEmpty ? nil : String(e.notiz.prefix(1000)),
-            fruehereDiagnose: mitDiagnose ? e.analyse?.diagnose : nil)
+            fruehereDiagnose: mitDiagnose ? e.analyse?.diagnose : nil, sauerteig: r.sauerteigArt.rawValue, verhaeltnis: w.verhaeltnis.rawValue)
     }
 
     /// Kontext zu `e`; dazu bis zu drei frühere Einträge mit derselben Mehlmischung.

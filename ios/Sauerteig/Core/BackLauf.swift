@@ -184,6 +184,17 @@ struct BackLauf: Codable, Hashable, Sendable {
                 }
             }
         }
+        // Weizenteig: in der laufenden ersten Gare dehnen und falten (kein eigener Schritt)
+        if phase == .backen, schritte.indices.contains(laufend), schritte[laufend].titel == Rechner.gareFalten {
+            let g = schritte[laufend]
+            let zeiten = Rechner.faltZeiten(g.dauer)
+            for (k, z) in zeiten.enumerated() {
+                let text = k + 1 < zeiten.count
+                    ? "Nächstes Mal um \(Self.uhrzeit(g.at + Double(zeiten[k + 1]) * Self.min, jetzt: jetzt))."
+                    : "Das letzte Mal, danach in Ruhe gehen lassen."
+                out.append(("\(laufend):falten\(k)", g.at + Double(z) * Self.min, "Dehnen und falten (\(k + 1) von \(zeiten.count))", text))
+            }
+        }
         // Backen: Wechsel von der Stufe mit Dampf auf die ohne
         if let e = dampfEnde, let d = dampf {
             let fertig = folgt(auf: laufend).map { " Fertig ca. \(Self.uhrzeit(schritte[$0].at, jetzt: jetzt))." } ?? ""

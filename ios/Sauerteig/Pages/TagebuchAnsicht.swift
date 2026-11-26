@@ -588,7 +588,7 @@ struct EintragAnsicht: View {
             FactRow("Anteile", anteile)
             FactRow("Teig", "\(m.teiggewicht) g" + (w.teigTeilen ? " (2 Brote)" : ""))
             FactRow("Hydration", "\(w.hydration) %")
-            FactRow("Anstellgut", "\(w.anstellgut) g")
+            FactRow("Anstellgut", "\(m.anstellgut) g · \(w.verhaeltnis.text)")
             FactRow("Temperaturen", "Sauerteig \(w.sauerteigTemp) °C · Gare \(w.gareTemp) °C")
             FactRow("Ofen", "\(m.anbackTemp) °C Dampf \(m.dampfMin) Min, dann \(m.ofenTemp) °C \(m.backZeit)")
             RowDivider()

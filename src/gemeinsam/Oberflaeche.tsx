@@ -4,12 +4,28 @@
  * (app/static/style.css) und sauerteig.css. */
 import { useEffect, useState } from 'react';
 import type { CSSProperties, Dispatch, FormHTMLAttributes, ReactNode, SetStateAction } from 'react';
-import { SORTEN, mehlMischungen, tipps, type Anteile, type Sorte } from './daten';
 import {
+  SAUERTEIG_ARTEN,
+  SORTEN,
+  VERHAELTNISSE,
+  mehlMischungen,
+  tipps,
+  verhaeltnisText,
+  type Anteile,
+  type SauerteigArt,
+  type Sorte,
+  type Verhaeltnis,
+} from './daten';
+import {
+  ANBACK_STANDARD,
+  VORFORMEN_MIN,
+  alteWerte,
   berechneOptimaleHydration,
   berechneRezept,
   hm,
+  hmKurz,
   normalisiere,
+  sauerteigArtFuer,
   spanne,
   type Rezept as Berechnung,
   type SchrittArt,
@@ -20,10 +36,12 @@ import { TimerKarte, TimerStart, useJetzt, useLauf, useMeldungen } from './Timer
 import './sauerteig.css';
 
 export interface Werte {
-  anstellgut: number;
   sauerteigTemp: number;
   gareTemp: number;
+  /** Teiggewicht (g); das Anstellgut rechnet der Rechner daraus */
   brotGroesse: number;
+  /** Anstellgut : Mehl : Wasser beim Ansetzen */
+  verhaeltnis: Verhaeltnis;
   hydration: number;
   mischung: string;
   custom: Anteile;
@@ -31,14 +49,21 @@ export interface Werte {
   ofenTemp: number;
   /** Anbacken mit Dampf (°C); fehlt: automatisch (anbackTempAus) */
   anbackTemp?: number;
+  /** Mehl des Sauerteigs; fehlt: passend zum Brot (sauerteigArtFuer), bei Mischungswechsel wieder automatisch */
+  sauerteigArt?: SauerteigArt;
 }
+
+const istSauerteigArt = (v: unknown): v is SauerteigArt => SAUERTEIG_ARTEN.some(([k]) => k === v);
+/** Ab so viel Anstellgut (g) der Hinweis, es vorher zu vermehren. */
+const ANSTELLGUT_VIEL = 150;
+const istVerhaeltnis = (v: unknown): v is Verhaeltnis => VERHAELTNISSE.some((x) => x.key === v);
 
 const START_MISCHUNG = 'roggen-optimal';
 export const START: Werte = {
-  anstellgut: 120,
   sauerteigTemp: 22,
   gareTemp: 30,
   brotGroesse: 1200,
+  verhaeltnis: 'normal',
   hydration: berechneOptimaleHydration(mehlMischungen[START_MISCHUNG]!),
   mischung: START_MISCHUNG,
   custom: { roggen: 70, dinkel: 20, weizen: 10, buchweizen: 0 },
@@ -52,10 +77,10 @@ const anteileVon = (w: Werte): Anteile =>
 /** Format der eigenständigen App (Einstellungen in speicher.ts): Zahlen als Strings. */
 export function alsEinstellungen(w: Werte): Record<string, string | boolean> {
   return {
-    anstellgut: String(w.anstellgut),
     sauerteigTemp: String(w.sauerteigTemp),
     gareTemp: String(w.gareTemp),
     brotGroesse: String(w.brotGroesse),
+    verhaeltnis: w.verhaeltnis,
     hydration: String(w.hydration),
     mehlMischung: w.mischung,
     customRoggen: String(w.custom.roggen),
@@ -65,6 +90,7 @@ export function alsEinstellungen(w: Werte): Record<string, string | boolean> {
     teigTeilen: w.teigTeilen,
     ofenTemp: String(w.ofenTemp),
     ...(w.anbackTemp !== undefined ? { anbackTemp: String(w.anbackTemp) } : {}),
+    ...(w.sauerteigArt ? { sauerteigArt: w.sauerteigArt } : {}),
   };
 }
 
@@ -77,12 +103,16 @@ function ausEinstellungen(e: Record<string, unknown>): Werte {
     typeof e.mehlMischung === 'string' && (e.mehlMischung === 'custom' || e.mehlMischung in mehlMischungen)
       ? e.mehlMischung
       : START_MISCHUNG;
+  // Rezepte von vor dem einstellbaren Verhältnis: Anstellgut und „Brotgröße“ ergaben zusammen das Teiggewicht, die
+  // Hydration zählte das Anstellgut nicht mit. Umgerechnet, damit der Teig gleich bleibt.
+  const neu = istVerhaeltnis(e.verhaeltnis);
+  const alt = alteWerte(n('anstellgut', 120), n('brotGroesse', START.brotGroesse), n('hydration', 75));
   return {
-    anstellgut: n('anstellgut', START.anstellgut),
     sauerteigTemp: n('sauerteigTemp', START.sauerteigTemp),
     gareTemp: n('gareTemp', START.gareTemp),
-    brotGroesse: n('brotGroesse', START.brotGroesse),
-    hydration: n('hydration', START.hydration),
+    brotGroesse: neu ? n('brotGroesse', START.brotGroesse) : alt.brotGroesse,
+    verhaeltnis: neu ? (e.verhaeltnis as Verhaeltnis) : 'normal',
+    hydration: neu ? n('hydration', START.hydration) : alt.hydration,
     mischung,
     custom: {
       roggen: n('customRoggen', START.custom.roggen),
@@ -93,6 +123,7 @@ function ausEinstellungen(e: Record<string, unknown>): Werte {
     teigTeilen: typeof e.teigTeilen === 'boolean' ? e.teigTeilen : false,
     ofenTemp: n('ofenTemp', START.ofenTemp),
     ...(Number.isFinite(parseInt(String(e.anbackTemp ?? ''), 10)) ? { anbackTemp: n('anbackTemp', 250) } : {}),
+    ...(istSauerteigArt(e.sauerteigArt) ? { sauerteigArt: e.sauerteigArt } : {}),
   };
 }
 
@@ -171,33 +202,89 @@ function SauerteigSalz({ r }: { r: Berechnung }) {
   );
 }
 
+/** Erklärung zum Mehl des Sauerteigs (Roggen- oder Weizensauerteig); wie SauerteigDaten.mehlInfo (iOS). */
+export const SAUERTEIG_MEHL_INFO = [
+  'Roggen, Weizen oder Dinkel, je nach Sauerteig: das Mehl, mit dem du dein Anstellgut führst, am besten Vollkorn. Einstellen unter „Anstellgut“; vorgewählt ist das Hauptmehl des Brotes.',
+  'Weizen- und Dinkelsauerteig reifen schneller und schmecken milder. Hat er sich verdoppelt, ist er reif: Dann gleich weiter, sonst wird er sauer und verliert Triebkraft.',
+  'Bei Broten mit viel Roggen (ab etwa der Hälfte) besser Roggenmehl nehmen, auch für ein Weizen-Anstellgut. Roggen braucht die Säure des Sauerteigs, sonst wird die Krume klebrig.',
+];
+
+function SauerteigAnsetzen({ r, w }: { r: Berechnung; w: Werte }) {
+  const [info, setInfo] = useState(false);
+  return (
+    <>
+      <ul className="sd-rows">
+        <Zeile label="Anstellgut">{r.anstellgut} g</Zeile>
+        <Zeile
+          label={
+            <>
+              {MEHL_NAME[r.sauerteigArt]}
+              <button
+                type="button"
+                className="info-btn"
+                aria-expanded={info}
+                aria-controls="sd-mehl-info"
+                aria-label="Welches Mehl?"
+                onClick={() => setInfo(!info)}
+              >
+                i
+              </button>
+            </>
+          }
+          dot={`var(--mehl-${r.sauerteigArt})`}
+        >
+          {r.sauerteigMehl} g
+        </Zeile>
+        <Zeile label="Wasser" dot="var(--mehl-wasser)">
+          {r.sauerteigWasser} ml
+        </Zeile>
+      </ul>
+      {info && (
+        <div className="info-panel" id="sd-mehl-info" style={{ margin: '0 0 12px' }}>
+          {SAUERTEIG_MEHL_INFO.map((t) => (
+            <p key={t}>{t}</p>
+          ))}
+        </div>
+      )}
+      {r.sauerteigHinweis && <div className="sd-note">{r.sauerteigHinweis}</div>}
+      {r.tempHinweis && <div className="sd-note">{r.tempHinweis}</div>}
+      <ol className="sd-steps">
+        <li>Anstellgut, Mehl und Wasser ({verhaeltnisText(r.verhaeltnis)}) gründlich verrühren.</li>
+        <li>
+          Abgedeckt bei {w.sauerteigTemp} °C <strong>{r.zeitplan.sauerteigZeit}</strong> reifen lassen.
+        </li>
+        <li>
+          {r.sauerteigArt === 'roggen'
+            ? 'Reif, wenn er Blasen wirft, gewölbt ist, feine Risse an der Oberfläche zeigt und säuerlich riecht.'
+            : 'Reif, wenn er sich etwa verdoppelt hat, gewölbt und durchgehend blasig ist und mild säuerlich riecht.'}{' '}
+          Ergibt ca. {r.sauerteigGesamt} g.
+        </li>
+      </ol>
+    </>
+  );
+}
+
+/** [30, 60, 90] → „30, 60 und 90“ */
+const aufzaehlung = (z: number[]) => (z.length > 1 ? `${z.slice(0, -1).join(', ')} und ${z[z.length - 1]}` : String(z[0] ?? ''));
+
+/** Weizenteig: kneten statt nur mischen, damit sich der Kleber bildet. */
+function Kneten({ r }: { r: Berechnung }) {
+  return (
+    <>
+      <li>
+        Alles zum Autolyseteig geben und kneten, bis der Teig glatt ist und sich vom Schüsselrand löst: von Hand ca. 10
+        Min{r.mehl.dinkel > r.mehl.weizen ? ', Dinkel nur ca. 5 Min, er verträgt kein langes Kneten' : ''}.
+      </li>
+      <li>Fenstertest: Ein Stück Teig lässt sich dünn ausziehen, ohne gleich zu reißen (Vollkorn reißt etwas früher).</li>
+    </>
+  );
+}
+
 /** Zutaten und Anleitung eines Schritts im Ablauf. */
 function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; w: Werte }) {
   switch (art) {
     case 'ansetzen':
-      return (
-        <>
-          <ul className="sd-rows">
-            <Zeile label="Anstellgut">{r.anstellgut} g</Zeile>
-            <Zeile label="Roggen-Vollkornmehl" dot="var(--mehl-roggen)">
-              {r.sauerteigMehl} g
-            </Zeile>
-            <Zeile label="Wasser" dot="var(--mehl-wasser)">
-              {r.sauerteigWasser} ml
-            </Zeile>
-          </ul>
-          {r.tempHinweis && <div className="sd-note">{r.tempHinweis}</div>}
-          <ol className="sd-steps">
-            <li>Anstellgut, Mehl und Wasser gründlich verrühren.</li>
-            <li>
-              Abgedeckt bei {w.sauerteigTemp} °C <strong>{r.zeitplan.sauerteigZeit}</strong> reifen lassen.
-            </li>
-            <li>
-              Reif, wenn er Blasen wirft, leicht gewölbt ist und säuerlich riecht. Ergibt ca. {r.sauerteigGesamt} g.
-            </li>
-          </ol>
-        </>
-      );
+      return <SauerteigAnsetzen r={r} w={w} />;
     case 'autolyse':
       return (
         <>
@@ -225,7 +312,11 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
             <SauerteigSalz r={r} />
           </ul>
           <ol className="sd-steps">
-            <li>Alles zum Autolyseteig geben und gründlich verkneten, mit feuchten Händen.</li>
+            {r.weizenTeig ? (
+              <Kneten r={r} />
+            ) : (
+              <li>Alles zum Autolyseteig geben und gründlich verkneten, mit feuchten Händen.</li>
+            )}
           </ol>
         </>
       ) : (
@@ -243,7 +334,18 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
         </>
       );
     case 'gare':
-      return (
+      return r.weizenTeig ? (
+        <ol className="sd-steps">
+          <li>
+            Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
+          </li>
+          <li>
+            Nach <strong>{aufzaehlung(r.faltZeiten)} Min</strong> dehnen und falten: mit nasser Hand eine Seite
+            hochziehen und über die Mitte legen, Schüssel drehen, rundum wiederholen. Danach in Ruhe gehen lassen.
+          </li>
+          <li>Fertig, wenn der Teig um etwa die Hälfte gewachsen, gewölbt und luftig ist und Blasen am Rand zeigt.</li>
+        </ol>
+      ) : (
         <ol className="sd-steps">
           <li>
             Abgedeckt bei {w.gareTemp} °C gehen lassen: <strong>{r.ersteGare}</strong>.
@@ -252,7 +354,21 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
         </ol>
       );
     case 'formen':
-      return (
+      return r.weizenTeig ? (
+        <ol className="sd-steps">
+          <li>
+            Teig auf eine leicht bemehlte Fläche geben
+            {w.teigTeilen ? `, halbieren (je ca. ${Math.round(r.einzelGewicht)} g)` : ''} und rund vorformen.{' '}
+            {VORFORMEN_MIN} Min entspannen lassen.
+          </li>
+          <li>Straff formen, rund oder länglich, mit dem Schluss nach oben in einen bemehlten Gärkorb legen.</li>
+          <li>
+            Stückgare bei {w.gareTemp} °C: <strong>{r.stueckgare}</strong>. Fertig, wenn eine Delle langsam und nicht
+            ganz zurückfedert.
+          </li>
+          <li>Oder abgedeckt über Nacht in den Kühlschrank (8-14 h) und kalt backen.</li>
+        </ol>
+      ) : (
         <ol className="sd-steps">
           {w.teigTeilen && <li>Teig halbieren, je ca. {Math.round(r.einzelGewicht)} g.</li>}
           <li>Mit feuchten Händen rundwirken, in einen bemehlten Gärkorb legen.</li>
@@ -266,7 +382,8 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
       return (
         <ol className="sd-steps">
           <li>
-            Ofen auf <strong>{r.anbackTemp} °C</strong> vorheizen (30-40 Min), mittlere Schiene.
+            Ofen auf <strong>{r.anbackTemp} °C</strong> vorheizen ({r.vorheizen}), mittlere Schiene, noch während der
+            Stückgare.
           </li>
           <li>Schüssel zum Abdecken oder ein Gefäß für Wasser (Schwaden) bereitstellen.</li>
         </ol>
@@ -274,7 +391,11 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
     case 'backen':
       return (
         <ol className="sd-steps">
-          <li>Stürzen und kreuzförmig einschneiden.</li>
+          <li>
+            {r.weizenTeig
+              ? 'Stürzen und einmal längs einschneiden, flach angesetzt und ca. 1 cm tief.'
+              : 'Stürzen und kreuzförmig einschneiden.'}
+          </li>
           <li>
             {r.dampfMin} Min bei {r.anbackTemp} °C <strong>mit Dampf</strong>{' '}
             {w.teigTeilen ? '(2 Brote → engere Dampfphase)' : '(Schüssel über Brot oder Schwaden)'}.
@@ -415,7 +536,7 @@ function Ablauf({
           const s = l?.schritte[i];
           // Nach „Sauerteig angesetzt“: Uhrzeit von–bis; vor „Backen beginnen“ geschätzt.
           const zeit = !s ? (
-            `T+${hm(t)}`
+            hmKurz(t)
           ) : (
             <>
               <span>
@@ -521,7 +642,7 @@ export function Rechner({
   const anteile = anteileVon(w);
   const optimal = berechneOptimaleHydration(anteile);
   const r = berechneRezept({
-    anstellgut: w.anstellgut,
+    verhaeltnis: w.verhaeltnis,
     sauerteigTemp: w.sauerteigTemp,
     gareTemp: w.gareTemp,
     brotGroesse: w.brotGroesse,
@@ -530,14 +651,18 @@ export function Rechner({
     teigTeilen: w.teigTeilen,
     ofenTemp: w.ofenTemp,
     anbackTemp: w.anbackTemp,
+    sauerteigArt: w.sauerteigArt,
   });
+  const artPassend = sauerteigArtFuer(anteile);
+  const [tippsOffen, setTippsOffen] = useState(false);
   const summe = SORTEN.reduce((a, [k]) => a + w.custom[k], 0);
   const mischung = w.mischung === 'custom' ? null : mehlMischungen[w.mischung];
 
   // Mischung oder eigene Anteile geändert: empfohlene Hydration setzen (wie die eigenständige App).
   const neueAnteile = (patch: Partial<Werte>) =>
     setW((alt) => {
-      const neu = { ...alt, ...patch };
+      // Sauerteig wieder passend zum neuen Brot (sauerteigArt weglassen = automatisch)
+      const { sauerteigArt: _, ...neu } = { ...alt, ...patch };
       return { ...neu, hydration: berechneOptimaleHydration(anteileVon(neu)) };
     });
 
@@ -744,16 +869,64 @@ export function Rechner({
           </div>
 
           <div className="card">
-            <h2>Temperaturen</h2>
-            <Regler
-              id="sd-anstellgut"
-              label="Anstellgut"
-              wert={`${w.anstellgut} g`}
-              value={w.anstellgut}
-              min={30}
-              max={200}
-              onChange={(v) => set({ anstellgut: v })}
-            />
+            <h2>Sauerteig und Temperaturen</h2>
+            <div className="sd-art">
+              <span className="sd-art-label" id="sd-verh-label">
+                Verhältnis
+              </span>
+              <div className="chips" role="radiogroup" aria-labelledby="sd-verh-label">
+                {VERHAELTNISSE.map((x) => (
+                  <label key={x.key} className="chip pick">
+                    <input
+                      type="radio"
+                      name="sd-verh"
+                      value={x.key}
+                      checked={w.verhaeltnis === x.key}
+                      onChange={() => set({ verhaeltnis: x.key })}
+                    />
+                    {x.name} <span className="sd-chip-sub">{verhaeltnisText(x.key)}</span>
+                  </label>
+                ))}
+              </div>
+              <ul className="sd-rows" style={{ margin: '10px 0 0' }}>
+                <Zeile label="Anstellgut">{r.anstellgut} g</Zeile>
+              </ul>
+              <p className="muted small" style={{ margin: '4px 0 0' }}>
+                Aus Teiggewicht und Verhältnis; {r.versaeuerung} % des Mehls stecken im Sauerteig. Mehr Futter (1 : 5 :
+                5) reift länger und schmeckt milder, weniger (1 : 1 : 1) geht schneller und wird kräftiger.
+              </p>
+              {r.anstellgut > ANSTELLGUT_VIEL && (
+                <div className="sd-note" style={{ margin: '8px 0 0' }}>
+                  So viel Anstellgut hast du vielleicht nicht im Glas: am Vortag auffrischen und vermehren.
+                </div>
+              )}
+            </div>
+            <div className="sd-art">
+              <span className="sd-art-label" id="sd-art-label">
+                Sauerteig aus{' '}
+                {r.sauerteigArt === artPassend ? (
+                  <span className="pill effort">Passend zum Brot</span>
+                ) : (
+                  <span className="pill today">Angepasst</span>
+                )}
+              </span>
+              <div className="chips" role="radiogroup" aria-labelledby="sd-art-label">
+                {SAUERTEIG_ARTEN.map(([k, n]) => (
+                  <label key={k} className="chip pick">
+                    <input
+                      type="radio"
+                      name="sd-art"
+                      value={k}
+                      checked={r.sauerteigArt === k}
+                      onChange={() => set({ sauerteigArt: k })}
+                    />
+                    <i className="sd-dot" style={{ background: `var(--mehl-${k})` }} />
+                    {n}
+                  </label>
+                ))}
+              </div>
+              {r.sauerteigHinweis && <div className="sd-note">{r.sauerteigHinweis}</div>}
+            </div>
             <Regler
               id="sd-st-temp"
               label="Sauerteig-Temperatur"
@@ -772,12 +945,13 @@ export function Rechner({
               max={32}
               onChange={(v) => set({ gareTemp: v })}
             />
+            <div className="day-head">Ofen</div>
             <Regler
               id="sd-anback-temp"
               label="Anbacken mit Dampf"
               wert={`${r.anbackTemp} °C`}
-              value={r.anbackTemp}
-              min={w.ofenTemp}
+              value={w.anbackTemp ?? ANBACK_STANDARD}
+              min={200}
               max={350}
               step={5}
               onChange={(v) => set({ anbackTemp: v })}
@@ -815,8 +989,17 @@ export function Rechner({
           </div>
 
           <div className="card">
-            <h2>Tipps</h2>
-            <ul className="sd-tips">
+            <button
+              type="button"
+              className="sd-acc-head sd-tips-head"
+              aria-expanded={tippsOffen}
+              aria-controls="sd-tipps"
+              onClick={() => setTippsOffen(!tippsOffen)}
+            >
+              <h2 className="sd-acc-title">Tipps</h2>
+              <Symbol name="chevron" />
+            </button>
+            <ul className="sd-tips" id="sd-tipps" hidden={!tippsOffen}>
               {tipps.map((t) => (
                 <li key={t}>
                   <Symbol name="check" size={17} />

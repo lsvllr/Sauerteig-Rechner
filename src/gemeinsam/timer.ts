@@ -8,7 +8,7 @@
  *   Push (setzeFernPush), meldet der; sonst meldet der Browser selbst.
  * Der Stand liegt in localStorage („sauerteig-timer“), ein Ticker prüft alle paar Sekunden. Lokale Mitteilungen
  * über den Service Worker, sonst die Notification-API; ohne offene App kommen sie nicht. */
-import type { Schritt } from './rechner';
+import { GARE_FALTEN, faltZeiten, type Schritt } from './rechner';
 
 export interface TimerSchritt {
   /** Fälligkeit (ms seit Epoche) */
@@ -167,6 +167,22 @@ export function faellig(lauf: Lauf, jetzt: number): Meldung[] {
         titel: `In ${lauf.vorlauf} Min: ${s.titel}`,
         text: `Um ${uhrzeit(s.at, jetzt)} (${s.dauer}).`,
       });
+  });
+  // Weizenteig: in der ersten Gare dehnen und falten (läuft im Schritt, kein eigener Schritt). Wird die Gare durch
+  // Abhaken verschoben, fallen diese Schlüssel mit ihr weg (gemeldet ab dem Index) und kommen neu.
+  lauf.schritte.forEach((s, i) => {
+    if (s.titel !== GARE_FALTEN) return;
+    const zeiten = faltZeiten(s.dauer);
+    zeiten.forEach((z, k) => {
+      const naechste = zeiten[k + 1];
+      merke(`${i}:falten${k}`, s.at + z * MIN, {
+        titel: `Dehnen und falten (${k + 1} von ${zeiten.length})`,
+        text:
+          naechste !== undefined
+            ? `Nächstes Mal um ${uhrzeit(s.at + naechste * MIN, jetzt)}.`
+            : 'Das letzte Mal, danach in Ruhe gehen lassen.',
+      });
+    });
   });
   return out;
 }

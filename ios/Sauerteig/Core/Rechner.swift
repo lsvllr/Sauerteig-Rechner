@@ -25,6 +25,45 @@ enum Sorte: String, CaseIterable, Codable, Sendable {
     }
 }
 
+/// Mehl, mit dem das Anstellgut geführt und der Sauerteig angesetzt wird (wie SauerteigArt im Web).
+enum SauerteigArt: String, CaseIterable, Codable, Sendable {
+    case roggen, weizen, dinkel
+
+    var sorte: Sorte {
+        switch self {
+        case .roggen: return .roggen
+        case .weizen: return .weizen
+        case .dinkel: return .dinkel
+        }
+    }
+}
+
+/// Verhältnis Anstellgut : Mehl : Wasser beim Ansetzen. Mehr Futter je Teil Anstellgut: weniger alte Säure, reift
+/// länger, schmeckt milder; weniger Futter: schneller und kräftiger. Wie Verhaeltnis (Web).
+enum Verhaeltnis: String, CaseIterable, Codable, Sendable {
+    case kraeftig, normal, mild
+
+    /// Teile Mehl (und Wasser) je Teil Anstellgut
+    var futter: Int {
+        switch self {
+        case .kraeftig: return 1
+        case .normal: return 2
+        case .mild: return 5
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .kraeftig: return "Kräftig"
+        case .normal: return "Normal"
+        case .mild: return "Mild"
+        }
+    }
+
+    /// „1 : 2 : 2“
+    var text: String { "1 : \(futter) : \(futter)" }
+}
+
 struct Anteile: Codable, Hashable, Sendable {
     var roggen = 0
     var dinkel = 0
@@ -71,6 +110,11 @@ enum SauerteigDaten {
         Mischung(key: "buchweizen-spezial", anteile: Anteile(roggen: 60, dinkel: 20, weizen: 5, buchweizen: 15), name: "Buchweizen Spezial", beschreibung: "Glutenfrei-Anteil, nussig, dunkel", eigenschaften: "Dunkle Farbe, erdiger Geschmack"),
         Mischung(key: "mild-luftig", anteile: Anteile(roggen: 40, dinkel: 30, weizen: 30), name: "Mild & Luftig", beschreibung: "Für Einsteiger, sehr locker", eigenschaften: "Sehr locker, mild, toast-geeignet"),
         Mischung(key: "power-vollkorn", anteile: Anteile(roggen: 45, dinkel: 25, weizen: 20, buchweizen: 10), name: "Power Vollkorn", beschreibung: "Maximum an Nährstoffen", eigenschaften: "Sehr nährstoffreich, kräftig"),
+        // Weizenteige (Weizen und Dinkel ab 70 %): eigener Ablauf mit Kneten, Dehnen und Falten, Vorformen
+        Mischung(key: "weizen-pur", anteile: Anteile(weizen: 100), name: "Reines Weizen", beschreibung: "Mild, saftig, kräftige Kruste", eigenschaften: "Locker, offene Krume, milder Geschmack"),
+        Mischung(key: "weizen-dinkel", anteile: Anteile(dinkel: 40, weizen: 60), name: "Weizen-Dinkel", beschreibung: "Mild-nussig, locker", eigenschaften: "Locker, nussiges Aroma"),
+        Mischung(key: "dinkel-pur", anteile: Anteile(dinkel: 100), name: "Reines Dinkel", beschreibung: "Nussig, bekömmlich, nur kurz kneten", eigenschaften: "Zart, nussig, etwas flacher als Weizen"),
+        Mischung(key: "weizen-roggen", anteile: Anteile(roggen: 30, weizen: 70), name: "Weizen-Roggen", beschreibung: "Weizenbrot mit würziger Roggennote", eigenschaften: "Locker, kräftiger als reines Weizen"),
     ]
 
     static func mischung(_ key: String) -> Mischung? { mischungen.first { $0.key == key } }
@@ -78,12 +122,21 @@ enum SauerteigDaten {
     static let tipps = [
         "Fingertest: Delle federt nur zur Hälfte zurück = fertig",
         "Bei viel Roggen: immer mit feuchten Händen arbeiten",
+        "Weizen und Dinkel: mit wenig Mehl formen und den Teig straff wirken",
         "Lieber etwas früher als zu spät backen",
         "Klopftest: Fertiges Brot klingt hohl",
         "Nach dem Backen mindestens 2h auskühlen lassen",
         "Je höher der Roggen-Anteil, desto kompakter das Brot",
+        "Weizenteig kann geformt über Nacht im Kühlschrank gehen (8-14 h) und kommt kalt in den Ofen",
         "Warmer Ort für die Gare: Backofen mit eingeschalteter Lampe hat ca. 30 °C",
     ]
+
+    /// Erklärung zum Mehl des Sauerteigs (Roggen- oder Weizensauerteig); wie SAUERTEIG_MEHL_INFO (Web).
+    static let mehlInfo = [
+        "Roggen, Weizen oder Dinkel, je nach Sauerteig: das Mehl, mit dem du dein Anstellgut führst, am besten Vollkorn. Einstellen unter „Anstellgut“; vorgewählt ist das Hauptmehl des Brotes.",
+        "Weizen- und Dinkelsauerteig reifen schneller und schmecken milder. Hat er sich verdoppelt, ist er reif: Dann gleich weiter, sonst wird er sauer und verliert Triebkraft.",
+        "Bei Broten mit viel Roggen (ab etwa der Hälfte) besser Roggenmehl nehmen, auch für ein Weizen-Anstellgut. Roggen braucht die Säure des Sauerteigs, sonst wird die Krume klebrig.",
+    ].joined(separator: "\n\n")
 }
 
 /// JavaScripts Math.round (halbe Werte zu +∞).
@@ -104,16 +157,19 @@ struct Zeitplan: Hashable, Sendable {
 }
 
 struct Eingabe: Sendable {
-    var anstellgut: Int
     var sauerteigTemp: Int
     var gareTemp: Int
+    /// Gewünschtes Teiggewicht (g); daraus folgen alle Mengen, auch das Anstellgut
     var brotGroesse: Int
+    var verhaeltnis: Verhaeltnis = .normal
     var hydration: Int
     var anteile: Anteile
     var teigTeilen: Bool
     var ofenTemp: Int = 220
-    /// Anbacken mit Dampf (°C); nil = Ofentemperatur + 30, höchstens 250
+    /// Anbacken mit Dampf (°C); nil = 250 (nie unter der Ofentemperatur)
     var anbackTemp: Int? = nil
+    /// Mehl des Sauerteigs; nil = passend zum Brot (`Rechner.sauerteigArt`)
+    var sauerteigArt: SauerteigArt? = nil
 }
 
 struct Berechnung: Sendable {
@@ -125,10 +181,21 @@ struct Berechnung: Sendable {
     var einzelGewicht: Double
     var hydration: Int
     var zeitplan: Zeitplan
+    var verhaeltnis: Verhaeltnis
+    /// Prozent des Mehls im Sauerteig
+    var versaeuerung: Int
+    var sauerteigArt: SauerteigArt
+    /// Warnung, wenn der Sauerteig nicht zum Brot passt (viel Roggen, aber kein Roggensauerteig); sonst leer
+    var sauerteigHinweis: String
     var ersteGare, stueckgare, backZeit: String
+    /// Weizenteig: Minuten nach Beginn der ersten Gare zum Dehnen und Falten; sonst leer
+    var faltZeiten: [Int]
+    var vorheizen: String
     var dampfMin, ofenTemp, anbackTemp: Int
     var autolyseZeit: String
     var mitAutolyse: Bool
+    /// Weizen und Dinkel ab 70 % (`Rechner.weizenTeig`): Kneten, Dehnen und Falten, Vorformen
+    var weizenTeig: Bool
     var tempHinweis: String
     var krume, geschmack, haltbarkeit: String
     var schritte: [Schritt]
@@ -138,8 +205,34 @@ struct Berechnung: Sendable {
 enum Rechner {
     /// Hauptteig mischen und kneten, danach beginnt die erste Gare.
     static let hauptteigDauer = "10 Min"
-    /// Anbacktemperatur: gewählt (nie unter der Ofentemperatur) oder wie früher Ofentemperatur + 30, höchstens 250.
-    static func anbackTemp(ofen: Int, gewaehlt: Int?) -> Int { max(ofen, gewaehlt ?? min(250, ofen + 30)) }
+    /// Weizenteig: vorformen und entspannen lassen, bevor straff geformt wird (Minuten, vor der Stückgare).
+    static let vorformenMin = 20
+
+    /// Weizenteig: Weizen und Dinkel ab 70 %. Bildet ein Klebergerüst, wird also geknetet, in der ersten Gare
+    /// gedehnt und gefaltet, vorgeformt und straff geformt. Darunter gilt der Ablauf für Roggen- und Mischteige.
+    /// Wie istWeizenTeig (Web).
+    static func weizenTeig(_ a: Anteile) -> Bool { a.weizen + a.dinkel >= 70 }
+
+    /// Erste Gare (Stockgare) eines Weizenteigs: länger als bei Roggen und abhängig von der Gare-Temperatur.
+    /// Mit 20 % Versäuerung: warm um 28 °C 2-3 h, bei Raumtemperatur 4-6 h.
+    static func stockgareWeizen(_ gareTemp: Int) -> String { gareTemp >= 28 ? "2-3h" : gareTemp >= 24 ? "3-4h" : "4-6h" }
+
+    /// Titel der ersten Gare eines Weizenteigs; darin erinnert der Timer ans Dehnen und Falten (`faltZeiten`).
+    static let gareFalten = "Erste Gare, dehnen und falten"
+
+    /// Dehnen und Falten: Minuten nach Beginn der ersten Gare, alle 30 Min. 3 Mal, ab 3½ h Stockgare 4 Mal; danach
+    /// ruht der Teig noch mindestens eine Stunde. Wie faltZeiten (Web).
+    static func faltZeiten(_ ersteGare: String) -> [Int] {
+        guard let s = spanne(ersteGare) else { return [] }
+        return Double(s.0 + s.1) / 2 >= 210 ? [30, 60, 90, 120] : [30, 60, 90]
+    }
+
+    /// Vorheizen auf die Anbacktemperatur: heißer dauert länger (Stein oder Topf heizen mit).
+    static func vorheizDauer(_ anback: Int) -> String { anback <= 250 ? "30-40 Min" : anback <= 300 ? "40-50 Min" : "50-60 Min" }
+    /// Anbacken, wenn nichts gewählt ist. Fest, damit der Regler nicht mit der Ofentemperatur wandert.
+    static let anbackStandard = 250
+    /// Anbacktemperatur: gewählt oder `anbackStandard`, nie unter der Ofentemperatur.
+    static func anbackTemp(ofen: Int, gewaehlt: Int?) -> Int { max(ofen, gewaehlt ?? anbackStandard) }
 
     /// Dampfphase in Minuten: 15 (zwei Brote 10) bei 250 °C, heißer kürzer, kühler länger, wie bei Pizza. Die Hitze
     /// wirkt mit dem Abstand zum Siedepunkt im Teig (T − 100), überproportional (hoch 1,5): 350 °C → 7 Min,
@@ -150,7 +243,10 @@ enum Rechner {
     }
 
     static func optimaleHydration(_ a: Anteile) -> Int {
-        jsRound(Double(a.roggen * 75 + a.dinkel * 78 + a.weizen * 72 + a.buchweizen * 85) / 100)
+        // Vollkorn: Weizen nimmt viel Wasser auf und hält es im Kleber; Dinkel nimmt weniger auf, sein Kleber ist
+        // schwächer, zu nass wird er klebrig und läuft breit. Wie berechneOptimaleHydration (Web).
+        // Mit dem Anstellgut gerechnet; Roggen und Buchweizen deshalb 2 % mehr als früher ohne, damit der Teig gleich bleibt.
+        jsRound(Double(a.roggen * 77 + a.dinkel * 72 + a.weizen * 77 + a.buchweizen * 87) / 100)
     }
 
     /// Auf 100 % in 5er-Schritten; nil, wenn alle 0 sind.
@@ -168,12 +264,60 @@ enum Rechner {
         return n
     }
 
-    static func zeitplan(_ temp: Int) -> Zeitplan {
-        if temp <= 20 { return Zeitplan(sauerteigZeit: "10-12h", gareZeit: "90-120 Min") }
-        if temp <= 24 { return Zeitplan(sauerteigZeit: "8-10h", gareZeit: "90-120 Min") }
-        if temp <= 28 { return Zeitplan(sauerteigZeit: "6-8h", gareZeit: "70-90 Min") }
-        return Zeitplan(sauerteigZeit: "4-6h", gareZeit: "50-70 Min")
+    /// Sauerteig passend zum Brot: das Mehl mit dem größten Anteil (Buchweizen zählt nicht); bei Gleichstand
+    /// Roggen vor Weizen vor Dinkel. Wie sauerteigArtFuer (Web).
+    static func sauerteigArt(_ a: Anteile) -> SauerteigArt {
+        if a.roggen >= a.weizen && a.roggen >= a.dinkel { return .roggen }
+        return a.weizen >= a.dinkel ? .weizen : .dinkel
     }
+
+    /// Reifezeit des Sauerteigs je Sauerteig, Verhältnis und Temperatur (bis 20, bis 24, bis 28, darüber °C).
+    /// 1 : 2 : 2 wie bisher; 1 : 1 : 1 reift etwa ein Drittel schneller, 1 : 5 : 5 rund die Hälfte länger. Weizen- und
+    /// Dinkelsauerteig sind schneller als Roggensauerteig. Wie REIFE (Web).
+    static func reife(_ art: SauerteigArt, _ v: Verhaeltnis) -> [String] {
+        switch (art == .roggen, v) {
+        case (true, .kraeftig): return ["7-9h", "5-7h", "4-5h", "3-4h"]
+        case (true, .normal): return ["10-12h", "8-10h", "6-8h", "4-6h"]
+        case (true, .mild): return ["14-16h", "11-14h", "8-10h", "6-8h"]
+        case (false, .kraeftig): return ["5-7h", "4-5h", "3-4h", "2-3h"]
+        case (false, .normal): return ["8-10h", "6-8h", "4-6h", "3-5h"]
+        case (false, .mild): return ["11-14h", "8-10h", "6-8h", "5-6h"]
+        }
+    }
+
+    /// Reifezeit des Sauerteigs und Gare nach Temperatur.
+    static func zeitplan(_ temp: Int, _ art: SauerteigArt = .roggen, _ v: Verhaeltnis = .normal) -> Zeitplan {
+        let stufe = temp <= 20 ? 0 : temp <= 24 ? 1 : temp <= 28 ? 2 : 3
+        return Zeitplan(sauerteigZeit: reife(art, v)[stufe], gareZeit: ["90-120 Min", "90-120 Min", "70-90 Min", "50-70 Min"][stufe])
+    }
+
+    // Alle Mengen zählen das Anstellgut mit: Es ist halb Mehl, halb Wasser. Hydration, Versäuerung und Salz beziehen
+    // sich auf das ganze Mehl einschließlich des Anstellguts (wie in der Literatur).
+
+    /// Salz bezogen aufs ganze Mehl (wie bisher 14 g bei 660 g Mehl).
+    static let salz = 0.021
+
+    /// Versäuerung: Anteil des ganzen Mehls, der im Sauerteig steckt (mit dem Mehl des Anstellguts). Reines
+    /// Roggenbrot (ab 90 % Roggen) traditionell 50 %, Roggen- und Mischteige 45 % (wie bisher). Weizenteig braucht
+    /// weniger (üblich 10-30 %), sonst wird er sauer und der Kleber weich. Wie versaeuerung (Web).
+    static func versaeuerung(_ a: Anteile) -> Double { weizenTeig(a) ? 0.2 : a.roggen >= 90 ? 0.5 : 0.45 }
+
+    /// Rezepte von vor dem einstellbaren Verhältnis: Anstellgut und „Brotgröße“ ergaben zusammen das Teiggewicht,
+    /// und die Hydration zählte das Anstellgut nicht mit. Teiggewicht (auf 100 g) und Hydration mit Anstellgut, damit
+    /// der Teig gleich bleibt; dazu gehört das Verhältnis 1 : 2 : 2. Wie alteWerte (Web).
+    static func alteWerte(anstellgut a: Int, brotGroesse b: Int, hydration h: Int) -> (brotGroesse: Int, hydration: Int) {
+        let sMehl = a * 2
+        let skal = (Double(a * 5) / 600) * (Double(b) / 1200)
+        let hauptMehl = jsRound(360 * skal)
+        let hauptWasser = max(0, jsRound(Double((sMehl + hauptMehl) * h) / 100) - sMehl)
+        let teig = a + 2 * sMehl + hauptMehl + hauptWasser + jsRound(14 * skal)
+        let halb = Double(a) / 2
+        return (min(2000, max(600, jsRound(Double(teig) / 100) * 100)),
+                jsRound((halb + Double(sMehl + hauptWasser)) / (halb + Double(sMehl + hauptMehl)) * 100))
+    }
+
+    /// Geschmack nach dem Verhältnis beim Ansetzen. Wie mitSaeure (Web).
+    static func saeure(_ v: Verhaeltnis) -> String { v == .mild ? ", milde Säure" : v == .kraeftig ? ", kräftigere Säure" : "" }
 
     static func eigenschaften(_ a: Anteile) -> (String, String, String) {
         var krume: String, geschmack: String, haltbarkeit: String
@@ -215,6 +359,14 @@ enum Rechner {
         return "\(m / 60):" + String(format: "%02d", m % 60)
     }
 
+    /// Minuten → „3h 15m“ (bzw. „3h“ / „45m“), auf 5 Minuten gerundet.
+    static func hmKurz(_ x: Int) -> String {
+        let m = jsRound(Double(x) / 5) * 5
+        let h = m / 60, r = m % 60
+        if h == 0 { return "\(r)m" }
+        return r == 0 ? "\(h)h" : "\(h)h \(r)m"
+    }
+
     /// Dauer-Text → Minuten (Mitte der Spanne, auf 5 gerundet).
     static func dauerMinuten(_ d: String) -> Int {
         if let s = spanne(d) { return jsRound(Double(s.0 + s.1) / 10) * 5 }
@@ -226,21 +378,32 @@ enum Rechner {
 
     static func rezept(_ e: Eingabe) -> Berechnung {
         let a = e.anteile
-        let sMehl = e.anstellgut * 2
-        let sWasser = e.anstellgut * 2
-        let sGesamt = e.anstellgut + sMehl + sWasser
-        let skal = (Double(sGesamt) / 600) * (Double(e.brotGroesse) / 1200)
-        let gesamtMehl = jsRound(360 * skal)
+        // Ganzes Mehl aus dem Teiggewicht: Teig = Mehl × (1 + Hydration + Salz). Im Sauerteig steckt der Anteil v
+        // davon, als Anstellgut (halb Mehl) und Futter: Mehl im Sauerteig = Anstellgut × (Futter + ½) = v × Mehl.
+        let v = versaeuerung(a)
+        let futter = e.verhaeltnis.futter
+        let mehlGanz = jsRound(Double(e.brotGroesse) / (1 + Double(e.hydration) / 100 + Self.salz))
+        let asg = jsRound(v * Double(mehlGanz) / (Double(futter) + 0.5))
+        let imAsg = jsRound(Double(asg) / 2) // Mehl bzw. Wasser im Anstellgut
+        let sMehl = asg * futter
+        let sWasser = sMehl
+        let sGesamt = asg + sMehl + sWasser
+        let gesamtMehl = max(0, mehlGanz - imAsg - sMehl)
         var mehl = Anteile()
         for k in Sorte.allCases { mehl[k] = jsRound(Double(gesamtMehl * a[k]) / 100) }
-        let mehlGesamt = sMehl + gesamtMehl
-        let wasserZiel = jsRound(Double(mehlGesamt * e.hydration) / 100)
-        let hauptWasser = max(0, wasserZiel - sWasser)
-        let salz = jsRound(14 * skal)
+        let wasserZiel = jsRound(Double(mehlGanz * e.hydration) / 100)
+        let hauptWasser = max(0, wasserZiel - imAsg - sWasser)
+        let salz = jsRound(Double(mehlGanz) * Self.salz)
         let teig = jsRound(Double(sGesamt + gesamtMehl + hauptWasser + salz))
-        let hyd = jsRound(Double(sWasser + hauptWasser) / Double(mehlGesamt) * 100)
-        let zp = zeitplan(e.sauerteigTemp)
-        let ersteGare = zeitplan(22).gareZeit
+        let hyd = jsRound(Double(imAsg + sWasser + hauptWasser) / Double(mehlGanz) * 100)
+        let art = e.sauerteigArt ?? sauerteigArt(a)
+        let zp = zeitplan(e.sauerteigTemp, art, e.verhaeltnis)
+        let artHinweis = art != .roggen && a.roggen >= 50
+            ? "Viel Roggen im Teig: Für den Sauerteig besser Roggenmehl nehmen, sonst wird die Krume klebrig." : ""
+        let weizen = weizenTeig(a)
+        // Roggen- und Mischteige: feste erste Gare. Reines Roggenbrot nur eine kurze Teigruhe (das Mehl quillt, gehen
+        // soll es in der Stückgare). Weizenteige brauchen länger (Kleber reift, Dehnen und Falten).
+        let ersteGare = weizen ? stockgareWeizen(e.gareTemp) : a.roggen >= 90 ? "30-45 Min" : "90-120 Min"
         let einzel = e.teigTeilen ? Double(teig) / 2 : Double(teig)
         let ofen = e.ofenTemp
         let anback = Self.anbackTemp(ofen: ofen, gewaehlt: e.anbackTemp)
@@ -248,21 +411,28 @@ enum Rechner {
         let faktor = 1 + Double(220 - ofen) * 0.007
         let backZeit = "\(jsRound(basis.0 * faktor))-\(jsRound(basis.1 * faktor)) Min"
         let dampf = Self.dampfMinuten(anback, teigTeilen: e.teigTeilen)
-        let sgBase: Double = a.roggen >= 80 ? 45 : a.roggen >= 60 ? 60 : 90
+        // Stückgare nach Brotart und Temperatur (Basis bei 24-27 °C). Reines Roggenbrot bis zu Rissen in der
+        // Oberfläche (bei 25 °C etwa 1-1½ h), Weizenteig mit 20 % Versäuerung 1¼-1¾ h.
+        let sgBase: Double = weizen ? 75 : a.roggen >= 60 ? 60 : 90
         let sgF: Double = e.gareTemp >= 28 ? 0.75 : e.gareTemp >= 24 ? 1.0 : 1.15
         let sgMin = jsRound(sgBase * sgF)
         let sgMax = jsRound((sgBase + 30) * sgF)
         let stueckgare = "\(sgMin)-\(sgMax) Min"
         let hinweis = e.sauerteigTemp < 20 ? "Kühl: längere Reifezeit" : e.sauerteigTemp > 28 ? "Warm: Vorsicht vor Überreife" : ""
-        let autolyse = a.roggen >= 80 ? "— (entfällt bei Roggen)" : a.weizen >= 30 ? "60-90 Min" : "45-60 Min"
+        // Dinkel verträgt keine lange Autolyse (der Kleber wird weich), Weizen braucht länger.
+        let autolyse = a.roggen >= 80 ? "— (entfällt bei Roggen)" : a.dinkel >= 70 ? "30-45 Min" : a.weizen >= 30 ? "60-90 Min" : "45-60 Min"
         let mitAutolyse = a.roggen < 80
 
         let bz = spanne(backZeit) ?? (0, 0)
         let tMischen = mitte(spanne(zp.sauerteigZeit) ?? (0, 0))
         let tGare = tMischen + mitte(spanne(Self.hauptteigDauer) ?? (0, 0))
         let tFormen = tGare + mitte(spanne(ersteGare) ?? (0, 0))
-        let tBacken = tFormen + mitte((sgMin, sgMax))
-        let tOfen = max(tFormen, tBacken - 35)
+        // Der Ofen heizt während der Stückgare vor. Ist die kürzer als das Vorheizen, wartet das Backen auf den Ofen.
+        let vorheizen = vorheizDauer(anback)
+        let vh = mitte(spanne(vorheizen) ?? (0, 0))
+        let tStueckEnde = tFormen + (weizen ? Self.vorformenMin : 0) + mitte((sgMin, sgMax))
+        let tOfen = max(tFormen, tStueckEnde - vh)
+        let tBacken = max(tStueckEnde, tOfen + vh)
         let tAus = tBacken + dampf + mitte(bz)
         var s = [Schritt(t: 0, titel: "Sauerteig ansetzen", dauer: zp.sauerteigZeit, art: .ansetzen)]
         if mitAutolyse {
@@ -270,24 +440,27 @@ enum Rechner {
         }
         // Was genau dazukommt (Roggen erst nach der Autolyse), steht in der Anleitung des Schritts.
         s.append(Schritt(t: tMischen, titel: "Hauptteig", dauer: Self.hauptteigDauer, art: .mischen))
-        s.append(Schritt(t: tGare, titel: "Erste Gare", dauer: ersteGare, art: .gare))
+        s.append(Schritt(t: tGare, titel: weizen ? Self.gareFalten : "Erste Gare", dauer: ersteGare, art: .gare))
         s.append(Schritt(t: tFormen, titel: "Formen, Stückgare", dauer: stueckgare, art: .formen))
         // auf die volle Hitze der Dampfphase vorheizen
-        s.append(Schritt(t: tOfen, titel: "Ofen auf \(anback) °C vorheizen", dauer: "30-40 Min", art: .ofen))
+        s.append(Schritt(t: tOfen, titel: "Ofen auf \(anback) °C vorheizen", dauer: vorheizen, art: .ofen))
         s.append(Schritt(t: tBacken, titel: "Backen", dauer: "\(bz.0 + dampf)-\(bz.1 + dampf) Min", art: .backen))
         s.append(Schritt(t: tAus, titel: "Auskühlen", dauer: "min. 2h", art: .auskuehlen))
         let (krume, geschmack, haltbarkeit) = eigenschaften(a)
-        return Berechnung(anstellgut: e.anstellgut, sauerteigMehl: sMehl, sauerteigWasser: sWasser, sauerteigGesamt: sGesamt,
+        return Berechnung(anstellgut: asg, sauerteigMehl: sMehl, sauerteigWasser: sWasser, sauerteigGesamt: sGesamt,
                           gesamtMehl: gesamtMehl, mehl: mehl, hauptteigWasser: hauptWasser, salz: salz,
-                          teiggewicht: teig, einzelGewicht: einzel, hydration: hyd, zeitplan: zp, ersteGare: ersteGare,
-                          stueckgare: stueckgare, backZeit: backZeit, dampfMin: dampf, ofenTemp: ofen, anbackTemp: anback,
-                          autolyseZeit: autolyse, mitAutolyse: mitAutolyse, tempHinweis: hinweis,
-                          krume: krume, geschmack: geschmack, haltbarkeit: haltbarkeit, schritte: s, gesamtDauer: tAus)
+                          teiggewicht: teig, einzelGewicht: einzel, hydration: hyd, zeitplan: zp,
+                          verhaeltnis: e.verhaeltnis, versaeuerung: jsRound(v * 100), sauerteigArt: art, sauerteigHinweis: artHinweis, ersteGare: ersteGare,
+                          stueckgare: stueckgare, backZeit: backZeit, faltZeiten: weizen ? faltZeiten(ersteGare) : [], vorheizen: vorheizen, dampfMin: dampf, ofenTemp: ofen, anbackTemp: anback,
+                          autolyseZeit: autolyse, mitAutolyse: mitAutolyse, weizenTeig: weizen, tempHinweis: hinweis,
+                          krume: krume, geschmack: geschmack + Self.saeure(e.verhaeltnis), haltbarkeit: haltbarkeit, schritte: s, gesamtDauer: tAus)
     }
 }
 
 /// Einstellungen am Rechner. Als Rezept gespeichert im Format der Web-App (`einstellungen`).
 struct SauerteigWerte: Codable, Hashable, Sendable {
+    /// Nur noch für alte Werte (vor dem einstellbaren Verhältnis): Damals ergab das Anstellgut mit `brotGroesse`
+    /// das Teiggewicht (`migriert`). Heute rechnet der Rechner das Anstellgut aus.
     var anstellgut = 120
     var sauerteigTemp = 22
     var gareTemp = 30
@@ -300,10 +473,44 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
     /// Gewählte Anbacktemperatur (Dampfphase); nil = automatisch (`Rechner.anbackTemp`). Optional, damit ältere
     /// gespeicherte Werte ohne dieses Feld lesbar bleiben.
     var anbackTempWahl: Int? = nil
+    /// Gewähltes Mehl des Sauerteigs; nil = passend zum Brot. Optional wie `anbackTempWahl`.
+    var sauerteigArtWahl: SauerteigArt? = nil
+    /// Verhältnis beim Ansetzen. Optional, damit alte gespeicherte Werte lesbar bleiben; nil heißt alt (`migriert`).
+    var verhaeltnisWahl: Verhaeltnis? = .normal
+
+    var verhaeltnis: Verhaeltnis {
+        get { verhaeltnisWahl ?? .normal }
+        set { verhaeltnisWahl = newValue }
+    }
+
+    /// Alte Werte (ohne Verhältnis) umgerechnet: Teiggewicht und Hydration wie damals, Verhältnis 1 : 2 : 2.
+    func migriert() -> SauerteigWerte {
+        guard verhaeltnisWahl == nil else { return self }
+        var w = self
+        let alt = Rechner.alteWerte(anstellgut: anstellgut, brotGroesse: brotGroesse, hydration: hydration)
+        w.brotGroesse = alt.brotGroesse
+        w.hydration = alt.hydration
+        w.anstellgut = SauerteigWerte().anstellgut
+        w.verhaeltnisWahl = .normal
+        return w
+    }
+
+    /// Mehl des Sauerteigs, zum Einstellen (setzt die Wahl).
+    var sauerteigArt: SauerteigArt {
+        get { sauerteigArtWahl ?? Rechner.sauerteigArt(anteile) }
+        set { sauerteigArtWahl = newValue }
+    }
 
     /// Anbacktemperatur, zum Einstellen (setzt die Wahl).
     var anbackTemp: Int {
         get { Rechner.anbackTemp(ofen: ofenTemp, gewaehlt: anbackTempWahl) }
+        set { anbackTempWahl = newValue }
+    }
+
+    /// Stellung des Anbacken-Reglers: die Wahl selbst, nicht auf die Ofentemperatur angehoben. So bleibt der Regler
+    /// stehen, wenn sich die Ofentemperatur ändert; nur die Anzeige (`anbackTemp`) zieht mit.
+    var anbackRegler: Int {
+        get { anbackTempWahl ?? Rechner.anbackStandard }
         set { anbackTempWahl = newValue }
     }
 
@@ -312,14 +519,15 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
     }
 
     var eingabe: Eingabe {
-        Eingabe(anstellgut: anstellgut, sauerteigTemp: sauerteigTemp, gareTemp: gareTemp, brotGroesse: brotGroesse,
-                hydration: hydration, anteile: anteile, teigTeilen: teigTeilen, ofenTemp: ofenTemp, anbackTemp: anbackTempWahl)
+        Eingabe(sauerteigTemp: sauerteigTemp, gareTemp: gareTemp, brotGroesse: brotGroesse, verhaeltnis: verhaeltnis,
+                hydration: hydration, anteile: anteile, teigTeilen: teigTeilen, ofenTemp: ofenTemp, anbackTemp: anbackTempWahl,
+                sauerteigArt: sauerteigArtWahl)
     }
 
     /// `alsEinstellungen` der Web-App: Zahlen als Text, damit gespeicherte Rezepte zwischen Web und App gleich sind.
     var einstellungen: [String: Wert] {
         var e: [String: Wert] = [
-            "anstellgut": .text(String(anstellgut)), "sauerteigTemp": .text(String(sauerteigTemp)),
+            "verhaeltnis": .text(verhaeltnis.rawValue), "sauerteigTemp": .text(String(sauerteigTemp)),
             "gareTemp": .text(String(gareTemp)), "brotGroesse": .text(String(brotGroesse)),
             "hydration": .text(String(hydration)), "mehlMischung": .text(mischung),
             "customRoggen": .text(String(custom.roggen)), "customDinkel": .text(String(custom.dinkel)),
@@ -327,6 +535,7 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
             "teigTeilen": .bool(teigTeilen), "ofenTemp": .text(String(ofenTemp)),
         ]
         if let a = anbackTempWahl { e["anbackTemp"] = .text(String(a)) }
+        if let s = sauerteigArtWahl { e["sauerteigArt"] = .text(s.rawValue) }
         return e
     }
 
@@ -348,6 +557,10 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
         teigTeilen = e["teigTeilen"]?.bool ?? false
         ofenTemp = n("ofenTemp", d.ofenTemp)
         anbackTempWahl = e["anbackTemp"]?.int
+        sauerteigArtWahl = e["sauerteigArt"]?.text.flatMap(SauerteigArt.init(rawValue:))
+        // Ohne Verhältnis: altes Rezept, Teiggewicht und Hydration umrechnen
+        verhaeltnisWahl = e["verhaeltnis"]?.text.flatMap(Verhaeltnis.init(rawValue:))
+        self = migriert()
     }
 }
 
@@ -360,7 +573,7 @@ import SwiftUI
     List(Array(r.schritte.enumerated()), id: \.offset) { _, s in
         VStack(alignment: .leading, spacing: 6) {
             Text(s.titel).font(.headline)
-            Text("T+\(Rechner.hm(s.t)) · \(s.dauer)").font(.caption).foregroundStyle(.secondary)
+            Text("\(Rechner.hmKurz(s.t)) · \(s.dauer)").font(.caption).foregroundStyle(.secondary)
             Anleitung(art: s.art, r: r, w: Vorschau.werte)
         }
     }

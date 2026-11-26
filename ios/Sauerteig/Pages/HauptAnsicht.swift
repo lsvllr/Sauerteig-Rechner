@@ -15,6 +15,7 @@ struct HauptAnsicht: View {
     @State private var fuetternOffen = false
     @State private var offen: Int = 0
     @State private var abhakenUm: Int?
+    @AppStorage("tipps-offen") private var tippsOffen = false
 
     private var r: Berechnung { Rechner.rezept(w.eingabe) }
 
@@ -37,9 +38,15 @@ struct HauptAnsicht: View {
                             FactRow("Haltbarkeit", r.haltbarkeit)
                         }
                         Card {
-                            Text("Tipps").font(.headline)
-                            ForEach(SauerteigDaten.tipps, id: \.self) { t in
-                                Label(t, systemImage: "checkmark").font(.subheadline)
+                            AblaufAbschnitt(offen: tippsOffen, umschalten: { withAnimation(Metrics.move) { tippsOffen.toggle() } }) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(SauerteigDaten.tipps, id: \.self) { t in
+                                        Label(t, systemImage: "checkmark").font(.subheadline)
+                                    }
+                                }
+                                .padding(.top, 10)
+                            } label: {
+                                Text("Tipps").font(.headline)
                             }
                         }
                     }
@@ -108,7 +115,7 @@ struct HauptAnsicht: View {
         .onAppear {
             guard !geladen else { return }
             geladen = true
-            if let v = try? JSONDecoder().decode(SauerteigWerte.self, from: gespeichert) { w = v }
+            if let v = try? JSONDecoder().decode(SauerteigWerte.self, from: gespeichert) { w = v.migriert() }
             uebernimmGeladene()
         }
         .onChange(of: w) { _, v in gespeichert = (try? JSONEncoder().encode(v)) ?? Data() }
@@ -257,6 +264,7 @@ struct HauptAnsicht: View {
         var n = w
         n.mischung = m
         n.hydration = Rechner.optimaleHydration(n.anteile)
+        n.sauerteigArtWahl = nil // Sauerteig wieder passend zum neuen Brot
         w = n
     }
 
@@ -264,6 +272,7 @@ struct HauptAnsicht: View {
         var n = w
         n.custom = c
         n.hydration = Rechner.optimaleHydration(n.anteile)
+        n.sauerteigArtWahl = nil
         w = n
     }
 
@@ -279,13 +288,44 @@ struct HauptAnsicht: View {
         }
     }
 
+    /// Ab so viel Anstellgut (g) der Hinweis, es vorher zu vermehren (wie ANSTELLGUT_VIEL im Web).
+    private static let anstellgutViel = 150
+
     private var tempKarte: some View {
         Card {
-            Text("Temperaturen").font(.headline)
-            Regler(label: "Anstellgut", wert: "\(w.anstellgut) g", value: $w.anstellgut, range: 30...200, step: 1)
+            Text("Sauerteig und Temperaturen").font(.headline)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Verhältnis").font(.subheadline.weight(.semibold))
+                Picker("Verhältnis", selection: $w.verhaeltnis) {
+                    ForEach(Verhaeltnis.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .sensoryFeedback(.selection, trigger: w.verhaeltnis)
+                FactRow("Anstellgut", "\(r.anstellgut) g · \(r.verhaeltnis.text)")
+                Note("Aus Teiggewicht und Verhältnis; \(r.versaeuerung) % des Mehls stecken im Sauerteig. Mehr Futter (1 : 5 : 5) reift länger und schmeckt milder, weniger (1 : 1 : 1) geht schneller und wird kräftiger.")
+                if r.anstellgut > Self.anstellgutViel {
+                    Pill("So viel Anstellgut hast du vielleicht nicht im Glas: am Vortag auffrischen und vermehren.", .today)
+                }
+            }
+            .padding(.bottom, 4)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("Sauerteig aus").font(.subheadline.weight(.semibold))
+                    w.sauerteigArt == Rechner.sauerteigArt(w.anteile)
+                        ? Pill("Passend zum Brot", .effort) : Pill("Angepasst", .today)
+                }
+                Picker("Sauerteig aus", selection: $w.sauerteigArt) {
+                    ForEach(SauerteigArt.allCases, id: \.self) { Text($0.sorte.name).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .sensoryFeedback(.selection, trigger: w.sauerteigArt)
+                if !r.sauerteigHinweis.isEmpty { Note(r.sauerteigHinweis) }
+            }
+            .padding(.bottom, 4)
             Regler(label: "Sauerteig-Temperatur", wert: "\(w.sauerteigTemp) °C", value: $w.sauerteigTemp, range: 18...32, step: 1)
             Regler(label: "Gare-Temperatur", wert: "\(w.gareTemp) °C", value: $w.gareTemp, range: 20...32, step: 1)
-            Regler(label: "Anbacken mit Dampf", wert: "\(w.anbackTemp) °C", value: $w.anbackTemp, range: w.ofenTemp...350, step: 5,
+            Text("Ofen").font(.headline).padding(.top, 10)
+            Regler(label: "Anbacken mit Dampf", wert: "\(w.anbackTemp) °C", value: $w.anbackRegler, range: 200...350, step: 5,
                    hint: "Dampfphase: \(r.dampfMin) Min. Je heißer, desto kürzer (wie bei Pizza); auf diese Temperatur wird vorgeheizt.")
             Regler(label: "Ofentemperatur", wert: "\(w.ofenTemp) °C", value: $w.ofenTemp, range: 200...250, step: 5,
                    hint: "Nach der Dampfphase heruntergeschaltet, ohne Dampf: \(r.backZeit).")
@@ -409,7 +449,7 @@ struct HauptAnsicht: View {
                                         Text("bis \(BackLauf.uhrzeit(ts.at + Double(Rechner.dauerMinuten(s.dauer)) * 60_000, jetzt: jetzt))")
                                             .font(.caption).foregroundStyle(Color.hhMuted)
                                     } else {
-                                        Text("T+\(Rechner.hm(s.t))")
+                                        Text(Rechner.hmKurz(s.t))
                                     }
                                 }
                                 .font(.footnote.weight(.semibold).monospacedDigit())

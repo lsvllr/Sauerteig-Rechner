@@ -321,3 +321,34 @@
 .sd-timer-fern {
   margin: 8px 0 0;
 }
+/* Sauerteig aus Roggen/Weizen/Dinkel, unter dem Anstellgut */
+.sd-art {
+  margin: 4px 0 14px;
+}
+.sd-art-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.sd-art .sd-note {
+  margin: 10px 0 0;
+}
+/* Tipps: Kopf zum Auf- und Zuklappen */
+.sd-tips-head {
+  padding: 0;
+}
+.sd-tips-head h2 {
+  margin: 0;
+}
+.sd-tips-head + .sd-tips {
+  margin-top: 8px;
+}
+.sd-tips-head[aria-expanded='true'] > .sf:last-child {
+  transform: rotate(180deg);
+}
+.sd-chip-sub {
+  font-weight: 500;
+  opacity: 0.75;
+}

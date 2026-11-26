@@ -46,6 +46,64 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
            && ra.schritte.contains { $0.titel == "Ofen auf 320 °C vorheizen" }, "Anbacken gewählt: \(ra.dampfMin) Min")
     let altWerte = try? JSONDecoder().decode(SauerteigWerte.self, from: JSONEncoder().encode(SauerteigWerte()))
     pruefe(altWerte != nil, "gespeicherte Werte ohne Anbacktemperatur lesbar")
+    // Weizenteig (Weizen + Dinkel ab 70 %): Stockgare nach Gare-Temperatur, Vorformen vor der Stückgare
+    var ww = SauerteigWerte(); ww.mischung = "weizen-pur"
+    let rw = Rechner.rezept(ww.eingabe)
+    let r0 = Rechner.rezept(SauerteigWerte().eingabe)
+    pruefe(rw.weizenTeig && rw.ersteGare == "2-3h" && rw.schritte[3].titel == "Erste Gare, dehnen und falten"
+           && rw.stueckgare == "56-79 Min" && rw.schritte[6].t == 668 && rw.gesamtDauer == 713, "Weizenteig-Ablauf: \(rw.schritte)")
+    // Sauerteig passend zum Brot, änderbar; Weizensauerteig reift schneller
+    pruefe(rw.sauerteigArt == .weizen && rw.zeitplan.sauerteigZeit == "6-8h" && rw.sauerteigHinweis.isEmpty, "Weizensauerteig zum Weizenbrot")
+    var wr = SauerteigWerte()
+    pruefe(wr.sauerteigArt == .roggen && Rechner.rezept(wr.eingabe).zeitplan.sauerteigZeit == "8-10h", "Roggensauerteig zum Roggenbrot")
+    wr.sauerteigArt = .weizen
+    let rr = Rechner.rezept(wr.eingabe)
+    pruefe(rr.sauerteigArt == .weizen && !rr.sauerteigHinweis.isEmpty
+           && SauerteigWerte(einstellungen: wr.einstellungen).sauerteigArtWahl == .weizen
+           && SauerteigWerte(einstellungen: SauerteigWerte().einstellungen).sauerteigArtWahl == nil, "Sauerteig gewählt, Rundreise")
+    // Dehnen und Falten: Zeiten aus der Stockgare, Erinnerungen in der laufenden Gare
+    pruefe(rw.faltZeiten == [30, 60, 90] && Rechner.faltZeiten("4-5h") == [30, 60, 90, 120] && r0.faltZeiten.isEmpty, "Faltzeiten")
+    let s0 = 1_763_371_200_000.0, m = BackLauf.min
+    let lw = BackLauf.neu(rw.schritte, start: s0, vorlauf: 0, reife: Rechner.spanne(rw.zeitplan.sauerteigZeit)!)
+    let tg = s0 + 430 * m
+    let lw3 = lw.hakeAb(1, am: s0 + 345 * m).erledige(1, am: s0 + 420 * m).erledige(2, am: tg)
+    let falten = lw3.meldungen(jetzt: tg).filter { $0.id.hasPrefix("3:falten") }
+    pruefe(lw3.laufend == 3 && falten.map(\.at) == [tg + 30 * m, tg + 60 * m, tg + 90 * m]
+           && falten.last?.titel == "Dehnen und falten (3 von 3)", "Falten-Mitteilungen: \(falten)")
+    // Vorheizen: heißer länger; ist die Stückgare kürzer, wartet das Backen auf den Ofen
+    var wh = SauerteigWerte(); wh.mischung = "roggen-pur"; wh.gareTemp = 32; wh.anbackTemp = 350
+    let rh = Rechner.rezept(wh.eingabe)
+    pruefe(rh.vorheizen == "50-60 Min" && rh.schritte[3].t == 588 && rh.schritte[4].t == 590 && rh.schritte[5].t == 645
+           && rh.ersteGare == "30-45 Min"
+           && r0.vorheizen == "30-40 Min", "Vorheizen: \(rh.schritte)")
+    pruefe(Rechner.sauerteigArt(Anteile(roggen: 30, weizen: 70)) == .weizen && Rechner.sauerteigArt(Anteile(dinkel: 100)) == .dinkel
+           && Rechner.sauerteigArt(Anteile(roggen: 40, dinkel: 30, weizen: 30)) == .roggen, "Sauerteig nach Hauptmehl")
+    ww.gareTemp = 22
+    pruefe(Rechner.rezept(ww.eingabe).ersteGare == "4-6h", "Stockgare kühl länger")
+    // Teiggewicht → Anstellgut je Verhältnis (Versäuerung 45 %, mit Anstellgut gerechnet); Reife nach Verhältnis
+    var wt = SauerteigWerte(); wt.brotGroesse = 1500
+    let mengen = Verhaeltnis.allCases.map { v -> [Int] in
+        wt.verhaeltnis = v
+        let x = Rechner.rezept(wt.eingabe)
+        return [x.anstellgut, x.sauerteigMehl, x.teiggewicht, x.hydration]
+    }
+    pruefe(mengen == [[253, 253, 1499, 76], [152, 304, 1500, 76], [69, 345, 1499, 76]], "Mengen je Verhältnis: \(mengen)")
+    wt.verhaeltnis = .mild
+    pruefe(Rechner.rezept(wt.eingabe).zeitplan.sauerteigZeit == "11-14h" && Rechner.rezept(wt.eingabe).geschmack.hasSuffix("milde Säure"), "mild reift länger")
+    // Alte Rezepte (ohne Verhältnis): Teiggewicht und Hydration wie damals
+    var altE = SauerteigWerte().einstellungen
+    altE["verhaeltnis"] = nil; altE["anstellgut"] = .text("60"); altE["brotGroesse"] = .text("1200"); altE["hydration"] = .text("75")
+    let altW = SauerteigWerte(einstellungen: altE)
+    pruefe(altW.brotGroesse == 600 && altW.hydration == 77 && altW.verhaeltnisWahl == .normal
+           && Rechner.alteWerte(anstellgut: 120, brotGroesse: 1200, hydration: 75).brotGroesse == 1200
+           && Rechner.alteWerte(anstellgut: 120, brotGroesse: 1200, hydration: 75).hydration == 77, "altes Rezept umgerechnet")
+    var altJ = SauerteigWerte(); altJ.verhaeltnisWahl = nil; altJ.anstellgut = 120; altJ.hydration = 75
+    let altD = try? JSONDecoder().decode(SauerteigWerte.self, from: JSONEncoder().encode(altJ))
+    pruefe(altD?.verhaeltnisWahl == nil && altD?.migriert().brotGroesse == 1200 && altD?.migriert().hydration == 77, "alte gespeicherte Werte umgerechnet")
+    ww.mischung = "dinkel-pur"
+    pruefe(Rechner.rezept(ww.eingabe).autolyseZeit == "30-45 Min", "Dinkel: kurze Autolyse")
+    pruefe(!Rechner.weizenTeig(Anteile(roggen: 40, dinkel: 30, weizen: 30)) && Rechner.weizenTeig(Anteile(roggen: 30, weizen: 70))
+           && !r0.weizenTeig && r0.schritte[3].titel == "Erste Gare", "Roggen- und Mischteige wie bisher")
     // Back-Lauf: anlegen, abhaken, Tabelle, beenden
     let r = Rechner.rezept(SauerteigWerte().eingabe)
     let start = 1_763_371_200_000.0
@@ -186,7 +244,7 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
               KrumenAnalyse.Vorschlag(parameter: "hydration", aenderung: 40, text: "", grund: ""),
               KrumenAnalyse.Vorschlag(parameter: "", aenderung: 0, text: "Fingerprobe", grund: "")]
     let wv = SauerteigWerte().mitVorschlaegen(vs)
-    pruefe(wv.gareTemp == 32 && wv.ofenTemp == 225 && wv.hydration == 85 && wv.anstellgut == SauerteigWerte().anstellgut, "Vorschläge: gerundet und begrenzt")
+    pruefe(wv.gareTemp == 32 && wv.ofenTemp == 225 && wv.hydration == 85 && wv.brotGroesse == SauerteigWerte().brotGroesse, "Vorschläge: gerundet und begrenzt")
 
     // Füttern: Stand des Glases (ruhig → gelb am Fälligkeitstag → rot ab 2 Tagen drüber)
     let cal = Calendar.current
