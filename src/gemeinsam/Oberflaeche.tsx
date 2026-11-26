@@ -29,6 +29,8 @@ export interface Werte {
   custom: Anteile;
   teigTeilen: boolean;
   ofenTemp: number;
+  /** Anbacken mit Dampf (°C); fehlt: automatisch (anbackTempAus) */
+  anbackTemp?: number;
 }
 
 const START_MISCHUNG = 'roggen-optimal';
@@ -62,6 +64,7 @@ export function alsEinstellungen(w: Werte): Record<string, string | boolean> {
     customBuchweizen: String(w.custom.buchweizen),
     teigTeilen: w.teigTeilen,
     ofenTemp: String(w.ofenTemp),
+    ...(w.anbackTemp !== undefined ? { anbackTemp: String(w.anbackTemp) } : {}),
   };
 }
 
@@ -89,6 +92,7 @@ function ausEinstellungen(e: Record<string, unknown>): Werte {
     },
     teigTeilen: typeof e.teigTeilen === 'boolean' ? e.teigTeilen : false,
     ofenTemp: n('ofenTemp', START.ofenTemp),
+    ...(Number.isFinite(parseInt(String(e.anbackTemp ?? ''), 10)) ? { anbackTemp: n('anbackTemp', 250) } : {}),
   };
 }
 
@@ -262,7 +266,7 @@ function Anleitung({ art, r, w }: { art: SchrittArt | undefined; r: Berechnung; 
       return (
         <ol className="sd-steps">
           <li>
-            Ofen auf <strong>{r.ofenTemp} °C</strong> vorheizen (30-40 Min), mittlere Schiene.
+            Ofen auf <strong>{r.anbackTemp} °C</strong> vorheizen (30-40 Min), mittlere Schiene.
           </li>
           <li>Schüssel zum Abdecken oder ein Gefäß für Wasser (Schwaden) bereitstellen.</li>
         </ol>
@@ -525,6 +529,7 @@ export function Rechner({
     anteile,
     teigTeilen: w.teigTeilen,
     ofenTemp: w.ofenTemp,
+    anbackTemp: w.anbackTemp,
   });
   const summe = SORTEN.reduce((a, [k]) => a + w.custom[k], 0);
   const mischung = w.mischung === 'custom' ? null : mehlMischungen[w.mischung];
@@ -582,8 +587,12 @@ export function Rechner({
           </div>
           <div className="stat">
             <span className="muted">Backen</span>
-            <strong>{w.ofenTemp} °C</strong>
-            <small>{r.backZeit} nach Dampf</small>
+            <strong>
+              {r.anbackTemp} → {r.ofenTemp} °C
+            </strong>
+            <small>
+              {r.dampfMin} Min Dampf, dann {r.backZeit}
+            </small>
           </div>
         </div>
       </div>
@@ -764,6 +773,20 @@ export function Rechner({
               onChange={(v) => set({ gareTemp: v })}
             />
             <Regler
+              id="sd-anback-temp"
+              label="Anbacken mit Dampf"
+              wert={`${r.anbackTemp} °C`}
+              value={r.anbackTemp}
+              min={w.ofenTemp}
+              max={350}
+              step={5}
+              onChange={(v) => set({ anbackTemp: v })}
+            />
+            <p className="muted small">
+              Dampfphase: {r.dampfMin} Min. Je heißer, desto kürzer (wie bei Pizza); auf diese Temperatur wird
+              vorgeheizt.
+            </p>
+            <Regler
               id="sd-ofen-temp"
               label="Ofentemperatur"
               wert={`${w.ofenTemp} °C`}
@@ -774,7 +797,7 @@ export function Rechner({
               onChange={(v) => set({ ofenTemp: v })}
             />
             <p className="muted small" style={{ marginBottom: 0 }}>
-              Backen ohne Dampf: {r.backZeit}. Dampfphase bei {r.anbackTemp} °C.
+              Nach der Dampfphase heruntergeschaltet, ohne Dampf: {r.backZeit}.
             </p>
           </div>
         </div>

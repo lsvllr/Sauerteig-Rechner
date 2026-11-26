@@ -17,6 +17,21 @@ export interface Eingabe {
     teigTeilen: boolean;
     /** Backtemperatur nach der Dampfphase (°C), Standard 220 */
     ofenTemp?: number;
+    /** Anbacken mit Dampf (°C), bis 350; fehlt: Ofentemperatur + 30, höchstens 250 */
+    anbackTemp?: number;
+}
+
+/** Anbacktemperatur: gewählt (nie unter der Ofentemperatur) oder Ofentemperatur + 30, höchstens 250. */
+export function anbackTempAus(ofenTemp: number, gewaehlt?: number): number {
+    return Math.max(ofenTemp, gewaehlt ?? Math.min(250, ofenTemp + 30));
+}
+
+/** Dampfphase in Minuten: 15 (zwei Brote 10) bei 250 °C, heißer kürzer, kühler länger, wie bei Pizza. Die Hitze
+ * wirkt mit dem Abstand zum Siedepunkt im Teig (T − 100), überproportional (hoch 1,5): 350 °C → 7 Min,
+ * 300 °C → 10 Min, 230 °C → 19 Min. Die Zeit danach ändert sich nicht. Wie Rechner.dampfMinuten (iOS). */
+export function dampfMinuten(anbackTemp: number, teigTeilen: boolean): number {
+    const basis = teigTeilen ? 10 : 15;
+    return Math.max(3, Math.round(basis * Math.pow(150 / Math.max(anbackTemp - 100, 50), 1.5)));
 }
 
 /** Hauptteig mischen und kneten, danach beginnt die erste Gare. */
@@ -161,11 +176,11 @@ export function berechneRezept(e: Eingabe): Rezept {
     const einzelGewicht = teigTeilen ? teiggewicht / 2 : teiggewicht;
     // Backzeit bei 220 °C nach Gewicht; je 10 °C heißer rund 7 % kürzer, kühler entsprechend länger.
     const ofenTemp = e.ofenTemp ?? 220;
-    const anbackTemp = Math.min(250, ofenTemp + 30);
+    const anbackTemp = anbackTempAus(ofenTemp, e.anbackTemp);
     const basis: [number, number] = einzelGewicht <= 900 ? [22, 26] : einzelGewicht <= 1500 ? [28, 32] : [33, 38];
     const faktor = 1 + (220 - ofenTemp) * 0.007;
     const backZeit = Math.round(basis[0] * faktor) + "-" + Math.round(basis[1] * faktor) + " Min";
-    const dampfMin = teigTeilen ? 10 : 15;
+    const dampfMin = dampfMinuten(anbackTemp, teigTeilen);
 
     // Stückgare dynamisch nach Roggenanteil & Temperatur
     const stueckgareBase = anteile.roggen >= 80 ? 45 : anteile.roggen >= 60 ? 60 : 90;
@@ -196,7 +211,7 @@ export function berechneRezept(e: Eingabe): Rezept {
         [tMischen, 'Hauptteig', HAUPTTEIG_DAUER, 'mischen'],
         [tGare, 'Erste Gare', ersteGare, 'gare'],
         [tFormen, 'Formen, Stückgare', stueckgare, 'formen'],
-        [tOfen, `Ofen auf ${ofenTemp} °C vorheizen`, '30-40 Min', 'ofen'],
+        [tOfen, `Ofen auf ${anbackTemp} °C vorheizen`, '30-40 Min', 'ofen'],
         [tBacken, 'Backen', (bz[0] + dampfMin) + '-' + (bz[1] + dampfMin) + ' Min', 'backen'],
         [tAus, 'Auskühlen', 'min. 2h', 'auskuehlen']
     );
