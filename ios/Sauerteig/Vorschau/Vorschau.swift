@@ -21,7 +21,7 @@ enum Vorschau {
     static func lauf(_ t: Timer) -> BackLauf? {
         let r = rezept
         let reife = Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0)
-        func neu(vor h: Double) -> BackLauf { BackLauf.neu(r.schritte, start: (jetzt - h * stunde).rounded(), vorlauf: 10, reife: reife) }
+        func neu(vor h: Double) -> BackLauf { BackLauf.neu(r.schritte, start: (jetzt - h * stunde).rounded(), vorlauf: 10, reife: reife, dampf: BackLauf.dampf(r)) }
         switch t {
         case .keiner: return nil
         case .reift: return neu(vor: 2)

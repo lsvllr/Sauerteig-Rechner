@@ -15,7 +15,7 @@ struct BackSperrAnsicht: View {
     @Environment(\.isLuminanceReduced) private var gedimmt
 
     var body: some View {
-        let i = state.laufend(Date())
+        let i = state.laufend
         VStack(alignment: .leading, spacing: 8) {
             if !gedimmt {
                 HStack(spacing: 6) {
@@ -45,9 +45,8 @@ struct BackInselRechts: View {
     let state: BackAktivitaet.ContentState
 
     var body: some View {
-        let i = state.laufend(Date())
-        if let n = state.naechster(nach: i) {
-            BackCountdown(state: state, von: i, bis: n, insel: true)
+        if let z = state.ziel(Date()) {
+            BackCountdown(von: state.datum(state.laufend), bis: z)
                 .font(.title3.weight(.bold).monospacedDigit())
                 .frame(maxWidth: 100, alignment: .trailing)
                 .padding(.trailing, 4)
@@ -60,7 +59,7 @@ struct BackInselUnten: View {
     let state: BackAktivitaet.ContentState
 
     var body: some View {
-        BackSchrittInfo(a: a, state: state, i: state.laufend(Date()), kompakt: true)
+        BackSchrittInfo(a: a, state: state, i: state.laufend, kompakt: true)
             .padding(.horizontal, 4)
     }
 }
@@ -73,11 +72,10 @@ struct BackKompaktRechts: View {
     let state: BackAktivitaet.ContentState
 
     var body: some View {
-        let i = state.laufend(Date())
-        if let n = state.naechster(nach: i) {
-            BackCountdown(state: state, von: i, bis: n, insel: true)
+        if let z = state.ziel(Date()) {
+            BackCountdown(von: state.datum(state.laufend), bis: z)
                 .monospacedDigit()
-                .frame(maxWidth: 64)
+                .frame(maxWidth: 72) // Platz für „h:mm:ss“
         } else {
             Image(systemName: "checkmark").foregroundStyle(backAkzent)
         }
@@ -88,14 +86,14 @@ struct BackMinimal: View {
     let state: BackAktivitaet.ContentState
 
     var body: some View {
-        Image(systemName: state.naechster(nach: state.laufend(Date())) == nil ? "checkmark" : "timer")
+        Image(systemName: state.naechster(nach: state.laufend) == nil ? "checkmark" : "timer")
             .foregroundStyle(backAkzent)
     }
 }
 
 // MARK: - Teile
 
-/// Nächster Schritt mit Countdown und Fortschritt, nach dem letzten Schritt der Hinweis zum Auskühlen.
+/// Nächster Schritt mit Countdown, nach dem letzten Schritt der Hinweis zum Auskühlen.
 struct BackSchrittInfo: View {
     let a: BackAktivitaet
     let state: BackAktivitaet.ContentState
@@ -104,37 +102,49 @@ struct BackSchrittInfo: View {
     @Environment(\.isLuminanceReduced) private var gedimmt
 
     var body: some View {
-        if state.zeiten.indices.contains(i), let n = state.naechster(nach: i), gedimmt && !kompakt {
-            // Always-On: nur der kommende Schritt und die Restzeit.
-            HStack(alignment: .firstTextBaseline) {
-                Text(a.titel(n)).font(.headline).lineLimit(1)
-                Spacer(minLength: 8)
-                BackCountdown(state: state, von: i, bis: n)
-                    .font(.system(size: 30, weight: .heavy).monospacedDigit())
-                    .frame(maxWidth: 130, alignment: .trailing)
-            }
-        } else if state.zeiten.indices.contains(i), let n = state.naechster(nach: i) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
+        let jetzt = Date()
+        if state.zeiten.indices.contains(i), let n = state.naechster(nach: i) {
+            // Backen mit Dampf: Als Nächstes kommt die Stufe ohne Dampf.
+            let dampf = state.mitDampf(jetzt) ? state.dampf : nil
+            let ziel = state.ziel(jetzt) ?? state.datum(n)
+            let naechstes = dampf.map { "Ohne Dampf · \($0.temp) °C" } ?? a.titel(n)
+            if gedimmt && !kompakt {
+                // Always-On: nur der kommende Schritt und die Restzeit.
+                HStack(alignment: .lastTextBaseline) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(a.titel(n)).font(.headline).lineLimit(1)
-                        (Text("um ") + Text(state.datum(n), style: .time) + Text(a.dauer(n).isEmpty ? "" : " · \(a.dauer(n))"))
-                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Text("Als Nächstes").font(.caption).foregroundStyle(.secondary)
+                        Text(naechstes).font(.headline).lineLimit(1)
                     }
-                    if !kompakt {
-                        Spacer(minLength: 8)
-                        BackCountdown(state: state, von: i, bis: n)
-                            .font(.system(size: 30, weight: .heavy).monospacedDigit())
-                            .frame(maxWidth: 130, alignment: .trailing)
+                    Spacer(minLength: 8)
+                    BackCountdown(von: state.datum(i), bis: ziel)
+                        .font(.system(size: 30, weight: .heavy).monospacedDigit())
+                        .frame(maxWidth: 130, alignment: .trailing)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Als Nächstes").font(.caption).foregroundStyle(.secondary)
+                            Text(naechstes).font(.headline).lineLimit(1)
+                            (Text("um ") + Text(ziel, style: .time)
+                             + Text(dampf != nil ? " · bis \(a.titel(n)) ca. " : (a.dauer(n).isEmpty ? "" : " · \(a.dauer(n))"))
+                             + (dampf != nil ? Text(state.datum(n), style: .time) : Text("")))
+                                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        if !kompakt {
+                            Spacer(minLength: 8)
+                            BackCountdown(von: state.datum(i), bis: ziel)
+                                .font(.system(size: 30, weight: .heavy).monospacedDigit())
+                                .frame(maxWidth: 130, alignment: .trailing)
+                        }
                     }
+                    // Zeit um: Der Timer wartet aufs Abhaken bzw. Starten in der App (neu gezeichnet, sobald die
+                    // Anzeige veraltet).
+                    Text(jetzt < state.datum(n) ? "Jetzt: \(jetztTitel(i, jetzt))"
+                         : BackAktivitaet.mitStart(a.titel(n)) ? "\(a.titel(n)) fällig: in der App starten."
+                         : "„\(a.titel(i))“ fertig? In der App abhaken.")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                ProgressView(timerInterval: Self.spanne(state, i, n), countsDown: false) {
-                    EmptyView()
-                } currentValueLabel: {
-                    EmptyView()
-                }
-                .tint(backAkzent)
-                Text("Jetzt: \(a.titel(i))").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         } else {
             VStack(alignment: .leading, spacing: 2) {
@@ -146,33 +156,23 @@ struct BackSchrittInfo: View {
         }
     }
 
-    static func spanne(_ s: BackAktivitaet.ContentState, _ i: Int, _ n: Int) -> ClosedRange<Date> {
-        min(s.datum(i), s.datum(n))...s.datum(n)
+    /// „Backen mit Dampf · 250 °C“ bzw. „Backen ohne Dampf · 220 °C“, sonst der Titel.
+    private func jetztTitel(_ i: Int, _ jetzt: Date) -> String {
+        guard let d = state.dampf else { return a.titel(i) }
+        return state.mitDampf(jetzt) ? "\(a.titel(i)) mit Dampf · \(d.heiss) °C" : "\(a.titel(i)) ohne Dampf · \(d.temp) °C"
     }
 }
 
-/// Zählt auf dem Gerät selbst herunter, ohne Updates. Standard: immer digital („h:mm:ss“ bzw. „mm:ss“).
-/// `insel` (Dynamic Island, ab iOS 18): bei einer Stunde oder mehr nur „h:mm“, darunter „mm:ss“ (höchstens zwei
-/// Felder, der Wechsel passiert von selbst). Genauigkeit bewusst immer eine Sekunde, sonst schreibt das Format die
-/// Einheiten aus („1 Stunde“). Unter iOS 17 gibt es dieses Format nicht, dort auch in der Insel mit Sekunden.
+/// Zählt auf dem Gerät selbst herunter, ohne Updates: immer digital, „h:mm:ss“ ab einer Stunde, sonst „m:ss“.
+/// Auch in der Dynamic Island: Das kürzere Format von iOS 18 (`.timer(…maxFieldCount: 2)`) schreibt je nach Restzeit
+/// die Einheit aus („1 Stunde“).
 struct BackCountdown: View {
-    let state: BackAktivitaet.ContentState
-    let von: Int
-    let bis: Int
-    var insel = false
+    let von: Date
+    let bis: Date
 
     var body: some View {
-        let spanne = BackSchrittInfo.spanne(state, von, bis)
-        Group {
-            if insel, #available(iOS 18.0, *) {
-                Text(.currentDate, format: .timer(countingDownIn: spanne.lowerBound..<spanne.upperBound,
-                                                  maxFieldCount: 2,
-                                                  maxPrecision: .seconds(1)))
-            } else {
-                Text(timerInterval: spanne, countsDown: true)
-            }
-        }
-        .multilineTextAlignment(.trailing)
+        Text(timerInterval: min(von, bis)...bis, countsDown: true)
+            .multilineTextAlignment(.trailing)
     }
 }
 

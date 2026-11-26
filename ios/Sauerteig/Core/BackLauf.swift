@@ -23,6 +23,8 @@ struct BackLauf: Codable, Hashable, Sendable {
     var schritte: [TimerSchritt]
     /// erster noch nicht abgehakter Schritt
     var weiter: Int?
+    /// Stufen des Schritts „Backen“: erst mit Dampf, dann ohne. nil = ohne Stufen (Lauf aus der Web-App, ältere).
+    var dampf: BackAktivitaet.Dampf? = nil
 
     static let beginn = 1
     static let vorlaufWahl = [0, 5, 10, 15, 20, 30, 45, 60]
@@ -30,26 +32,81 @@ struct BackLauf: Codable, Hashable, Sendable {
     /// So lange nach dem letzten Schritt räumt sich der Lauf von selbst ab.
     static let aufraeumenNach = 3 * 3600 * 1000.0
 
-    static func neu(_ schritte: [Schritt], start: Double, vorlauf: Int, reife: (Int, Int)) -> BackLauf {
+    static func neu(_ schritte: [Schritt], start: Double, vorlauf: Int, reife: (Int, Int),
+                    dampf: BackAktivitaet.Dampf? = nil) -> BackLauf {
         BackLauf(phase: .reifen, start: start, reife: [start + Double(reife.0) * min, start + Double(reife.1) * min],
                  vorlauf: vorlauf,
                  schritte: schritte.map { TimerSchritt(at: start + Double(jsRound(Double($0.t) / 5) * 5) * min, titel: $0.titel, dauer: $0.dauer) },
-                 weiter: nil)
+                 weiter: nil, dampf: dampf)
     }
 
-    /// Index des nächsten nicht abgehakten Schritts.
+    /// Stufen fürs Backen aus dem Rezept: Anbacken mit Dampf, danach heruntergeschaltet ohne.
+    static func dampf(_ r: Berechnung) -> BackAktivitaet.Dampf {
+        BackAktivitaet.Dampf(min: r.dampfMin, heiss: r.anbackTemp, temp: r.ofenTemp)
+    }
+
+    /// Ende der Stufe mit Dampf (ms), solange gebacken wird (laufender Schritt „Backen“); sonst nil.
+    var dampfEnde: Double? {
+        guard phase == .backen, let d = dampf, schritte.indices.contains(laufend),
+              schritte[laufend].titel == BackAktivitaet.backen else { return nil }
+        return schritte[laufend].at + Double(d.min) * Self.min
+    }
+
+    /// Index des ersten noch nicht begonnenen Schritts. `at` eines Schritts ist sein Beginn (geplant, ab dem Beginn
+    /// tatsächlich); begonnen ist er, sobald der vorige als fertig abgehakt ist.
     var offenAb: Int { weiter ?? (phase == .reifen ? Self.beginn : Self.beginn + 1) }
+
+    /// Wird selbst gestartet, sobald er fällig ist, statt mit dem Ende des vorigen zu beginnen: „Autolyse ansetzen“
+    /// während der Sauerteig reift, „Ofen vorheizen“ während der Stückgare. Der vorige (dessen Zeit diesen Schritt
+    /// schon enthält) hat kein eigenes „Erledigt“: Er endet mit dem Start, das „Erledigt“ dieses Schritts beendet
+    /// beides. Die Autolyse zu starten beginnt zugleich das Backen.
+    func mitStart(_ i: Int) -> Bool { schritte.indices.contains(i) && BackAktivitaet.mitStart(schritte[i].titel) }
+
+    /// Laufender Schritt: der zuletzt begonnene. Bleibt es, bis er abgehakt (oder der nächste gestartet) ist, auch
+    /// wenn seine geplante Zeit um ist. Beim Reifen 0 (Sauerteig).
+    var laufend: Int { Swift.max(Swift.min(offenAb, schritte.count) - 1, 0) }
+
+    /// Schritt, der beginnt, wenn `i` fertig ist; nil = `i` ist der letzte.
+    func folgt(auf i: Int) -> Int? { i + 1 < schritte.count ? i + 1 : nil }
+
+    /// Schritt `i` hat ein „Erledigt“: nicht der letzte und nicht der vor einem Schritt mit eigenem Start.
+    func abhakbar(_ i: Int) -> Bool { i >= Self.beginn && i + 1 < schritte.count && !mitStart(i + 1) }
+
+    /// Schritt `i` lässt sich jetzt starten (oder seine Startzeit ändern): Er hat einen eigenen Start, und der
+    /// Schritt davor (beim Reifen der Sauerteig) oder er selbst läuft.
+    func startbar(_ i: Int) -> Bool {
+        i >= Self.beginn && mitStart(i) && (laufend == i - 1 || phase == .backen && laufend == i)
+    }
+
+    /// Fertig gebacken: der letzte Schritt (Auskühlen) hat begonnen.
+    var fertig: Bool { phase == .backen && offenAb >= schritte.count }
 
     /// Index des nächsten noch nicht fälligen Schritts, -1 wenn alle durch sind.
     func naechster(_ jetzt: Double) -> Int { schritte.firstIndex { $0.at > jetzt } ?? -1 }
 
-    /// Lange nach dem letzten Schritt: weg damit.
-    func abgelaufen(_ jetzt: Double) -> Bool { (schritte.last?.at ?? start) + Self.aufraeumenNach < jetzt }
+    /// Lange nach dem letzten Schritt: weg damit. Noch nicht fertig abgehakt: erst nach einem halben Tag, der Timer
+    /// wartet ja aufs Abhaken und kann weit hinter dem Plan sein.
+    func abgelaufen(_ jetzt: Double) -> Bool {
+        (schritte.last?.at ?? start) + (fertig ? Self.aufraeumenNach : 4 * Self.aufraeumenNach) < jetzt
+    }
 
-    /// Schritt `i` um `am` erledigt (Standard jetzt; früher, wenn das Weiterklicken vergessen wurde): Er bekommt diese
-    /// Uhrzeit, alle späteren verschieben sich um denselben Betrag. Danach Phase „backen“. Abhaken geht nur für den
-    /// nächsten offenen oder einen schon erledigten Schritt (der wird aktualisiert). `ueberspringen`: auch wenn
-    /// frühere noch offen sind (Knopf in der Live-Aktivität, die nur den laufenden Schritt zeigt).
+    /// Schritt `i` ist um `am` fertig (Standard jetzt; früher, wenn das Abhaken vergessen wurde): Der folgende Schritt
+    /// beginnt dann. Geht für den laufenden oder einen schon fertigen Schritt (dann neu ab da).
+    func erledige(_ i: Int, am: Double) -> BackLauf {
+        guard phase == .backen, abhakbar(i), i <= laufend else { return self }
+        return hakeAb(i + 1, am: am)
+    }
+
+    /// Schritt `i` mit eigenem Start beginnt um `am` (Ofen an); der vorige endet damit.
+    func starte(_ i: Int, am: Double) -> BackLauf {
+        guard startbar(i) else { return self }
+        return hakeAb(i, am: am)
+    }
+
+    /// Schritt `i` beginnt um `am`: Er bekommt diese Uhrzeit, alle späteren verschieben sich um denselben Betrag.
+    /// Danach Phase „backen“. Geht nur für den nächsten offenen oder einen schon begonnenen Schritt (der wird
+    /// aktualisiert). `ueberspringen`: auch wenn frühere noch offen sind (Knopf in der Live-Aktivität). Gleiche Regel
+    /// wie `hakeAbAm` in src/gemeinsam/timer.ts, deshalb bleibt der Zeitplan mit der Web-App verträglich.
     func hakeAb(_ i: Int, am: Double, ueberspringen: Bool = false) -> BackLauf {
         guard i >= Self.beginn, i <= offenAb || ueberspringen, i < schritte.count else { return self }
         var l = self
@@ -57,6 +114,29 @@ struct BackLauf: Codable, Hashable, Sendable {
         l.phase = .backen
         l.weiter = i + 1
         for j in i..<l.schritte.count { l.schritte[j].at += d }
+        return l
+    }
+
+    /// Lauf aus der Zeit, als ein abgehakter Schritt die Uhrzeit bekam, zu der er fertig war (bis November 2026; nur
+    /// „Backen beginnen“ setzte einen Beginn). Jetzt ist `at` der Beginn eines Schritts, also das Ende des vorigen:
+    /// Jede abgehakte Zeit wandert einen Schritt weiter, die nicht abgehakten rücken mit. Wann der erste Schritt nach
+    /// „Backen beginnen“ endete, ist nicht bekannt; geschätzt mit der geplanten Dauer des kürzeren der beiden
+    /// Schritte (Hauptteig 10 Min), vom Beginn bzw. vom Ende aus.
+    func ausAltemModell() -> BackLauf {
+        let b = Self.beginn
+        let k = Swift.min(offenAb, schritte.count) - 1 // zuletzt abgehakt
+        guard phase == .backen, k > b else { return self }
+        var l = self
+        for i in (b + 1)...k where i + 1 < schritte.count {
+            l = l.hakeAb(i + 1, am: schritte[i].at)
+        }
+        if b + 2 < l.schritte.count {
+            let anfang = l.schritte[b].at, ende = l.schritte[b + 2].at
+            let d0 = Double(Rechner.dauerMinuten(schritte[b].dauer)) * Self.min
+            let d1 = Double(Rechner.dauerMinuten(schritte[b + 1].dauer)) * Self.min
+            let geschaetzt = d0 <= d1 ? anfang + d0 : ende - d1
+            l.schritte[b + 1].at = Swift.min(Swift.max(geschaetzt, anfang), ende).rounded()
+        }
         return l
     }
 
@@ -82,18 +162,35 @@ struct BackLauf: Codable, Hashable, Sendable {
         if phase == .reifen {
             guard schritte.count > Self.beginn else { return [] }
             let b = schritte[Self.beginn]
-            out.append(("\(Self.beginn):jetzt", b.at, "Sauerteig prüfen", "Wenn er reif ist: „Backen beginnen“ tippen. Als Erstes: \(b.titel)."))
+            if mitStart(Self.beginn) {
+                out.append(("\(Self.beginn):jetzt", b.at, "Jetzt: \(b.titel)", "\(b.dauer), der Sauerteig reift dabei weiter. In der App „Starten“ tippen."))
+            } else {
+                out.append(("\(Self.beginn):jetzt", b.at, "Sauerteig prüfen", "Wenn er reif ist: „Backen beginnen“ tippen. Als Erstes: \(b.titel)."))
+            }
             if vorlauf > 0 {
                 out.append(("\(Self.beginn):bald", b.at - v, "In \(vorlauf) Min beginnt das Backen", "Um ca. \(Self.uhrzeit(b.at, jetzt: jetzt)): \(b.titel)."))
             }
-        } else {
-            for (i, s) in schritte.enumerated() where i >= offenAb {
-                let danach = i + 1 < schritte.count ? " Danach um \(Self.uhrzeit(schritte[i + 1].at, jetzt: jetzt)): \(schritte[i + 1].titel)." : ""
-                out.append(("\(i):jetzt", s.at, "Jetzt: \(s.titel)", "\(s.dauer).\(danach)"))
+        } else if let n = folgt(auf: laufend), offenAb == n {
+            // Nur der nächste Schritt: Weiter geht es erst mit dem Abhaken, dann wird neu geplant.
+            let c = schritte[laufend]
+            for i in n...n {
+                let s = schritte[i]
+                let text = mitStart(i)
+                    ? "\(s.dauer), „\(c.titel)“ läuft dabei weiter. In der App „Starten“ tippen."
+                    : "\(s.dauer). Zum Weiterschalten „\(c.titel)“ als erledigt abhaken."
+                out.append(("\(i):jetzt", s.at, "Jetzt: \(s.titel)", text))
                 if vorlauf > 0 {
                     out.append(("\(i):bald", s.at - v, "In \(vorlauf) Min: \(s.titel)", "Um \(Self.uhrzeit(s.at, jetzt: jetzt)) (\(s.dauer))."))
                 }
             }
+        }
+        // Backen: Wechsel von der Stufe mit Dampf auf die ohne
+        if let e = dampfEnde, let d = dampf {
+            let fertig = folgt(auf: laufend).map { " Fertig ca. \(Self.uhrzeit(schritte[$0].at, jetzt: jetzt))." } ?? ""
+            // Bei 250 °C Ofentemperatur ist die Hitze mit Dampf dieselbe: nichts herunterschalten.
+            let runter = d.heiss > d.temp
+            out.append(("\(laufend):dampf", e, runter ? "Dampf raus, auf \(d.temp) °C" : "Dampf raus",
+                        "Dampf ablassen bzw. Schüssel abnehmen" + (runter ? " und den Ofen auf \(d.temp) °C herunterschalten." : ", bei \(d.temp) °C weiterbacken.") + fertig))
         }
         return out.filter { $0.1 > jetzt }
     }
@@ -141,6 +238,7 @@ extension BackLauf {
             "phase": .text(phase.rawValue), "start": .zahl(start.rounded()), "reife": .json(reife.map { $0.rounded() }),
             "vorlauf": .zahl(Double(vorlauf)), "weiter": weiter.map { .zahl(Double($0)) } ?? .null,
             "schritte": .json(schritte.map { TimerSchritt(at: $0.at.rounded(), titel: $0.titel, dauer: $0.dauer) }),
+            "dampf": dampf.map { Wert.json($0) } ?? .null,
         ]
     }
 
@@ -151,7 +249,8 @@ extension BackLauf {
         let v = z["vorlauf"]?.int ?? 10
         self.init(phase: p, start: start, reife: reife.count == 2 ? reife : [start, start],
                   vorlauf: Self.vorlaufWahl.contains(v) ? v : 10, schritte: schritte,
-                  weiter: z["weiter"]?.int.map { Swift.min(Swift.max($0, Self.beginn), schritte.count) })
+                  weiter: z["weiter"]?.int.map { Swift.min(Swift.max($0, Self.beginn), schritte.count) },
+                  dampf: z["dampf"]?.json(BackAktivitaet.Dampf.self))
     }
 }
 

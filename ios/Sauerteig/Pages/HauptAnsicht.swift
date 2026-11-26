@@ -117,14 +117,24 @@ struct HauptAnsicht: View {
         .sheet(isPresented: $einstellungenOffen) { EinstellungenBlatt() }
         .sheet(item: Binding(get: { abhakenUm.map { AbhakenZiel(i: $0) } }, set: { abhakenUm = $0?.i })) { z in
             if z.i == 0 {
-                AbhakenUmBlatt(i: 0, titel: r.schritte.first?.titel ?? "", ansetzen: true) { am in
+                AbhakenUmBlatt(i: 0, titel: r.schritte.first?.titel ?? "", art: .angesetzt) { am in
                     timer.setzeStart(am: am)
                     oeffne(BackLauf.beginn)
                 }
+            } else if timer.lauf.map({ $0.startbar(z.i) && $0.laufend == z.i - 1 }) == true {
+                // Autolyse oder Ofen vor dem Start: Startzeit
+                AbhakenUmBlatt(i: z.i, titel: r.schritte.indices.contains(z.i) ? r.schritte[z.i].titel : "", art: .gestartet) { am in
+                    timer.starte(z.i, am: am)
+                }
+            } else if timer.lauf?.phase == .reifen {
+                AbhakenUmBlatt(i: z.i, titel: r.schritte.indices.contains(z.i) ? r.schritte[z.i].titel : "", art: .begonnen) { am in
+                    timer.beginneBacken(am: am)
+                    oeffne(z.i)
+                }
             } else {
                 AbhakenUmBlatt(i: z.i, titel: r.schritte.indices.contains(z.i) ? r.schritte[z.i].titel : "") { am in
-                    timer.hakeAb(z.i, am: am)
-                    oeffne(z.i + 1)
+                    timer.erledige(z.i, am: am)
+                    if let n = timer.lauf?.folgt(auf: z.i) { oeffne(n) }
                 }
             }
         }
@@ -157,7 +167,7 @@ struct HauptAnsicht: View {
                 stat("Teig", "\(r.teiggewicht) g", w.teigTeilen ? "2 × \(Int(r.einzelGewicht.rounded())) g" : "1 Brot")
                 stat("Hydration", "\(r.hydration) %", "\(r.gesamtMehl) g Mehl im Hauptteig")
                 stat("Gesamtdauer", "\(Rechner.hm(r.gesamtDauer)) h", "bis aus dem Ofen")
-                stat("Backen", "\(w.ofenTemp) °C", "\(r.backZeit) nach Dampf")
+                stat("Backen", "\(r.anbackTemp) → \(r.ofenTemp) °C", "\(r.dampfMin) Min Dampf, dann \(r.backZeit)")
             }
         }
     }
@@ -275,8 +285,10 @@ struct HauptAnsicht: View {
             Regler(label: "Anstellgut", wert: "\(w.anstellgut) g", value: $w.anstellgut, range: 30...200, step: 1)
             Regler(label: "Sauerteig-Temperatur", wert: "\(w.sauerteigTemp) °C", value: $w.sauerteigTemp, range: 18...32, step: 1)
             Regler(label: "Gare-Temperatur", wert: "\(w.gareTemp) °C", value: $w.gareTemp, range: 20...32, step: 1)
+            Regler(label: "Anbacken mit Dampf", wert: "\(w.anbackTemp) °C", value: $w.anbackTemp, range: w.ofenTemp...350, step: 5,
+                   hint: "Dampfphase: \(r.dampfMin) Min. Je heißer, desto kürzer (wie bei Pizza); auf diese Temperatur wird vorgeheizt.")
             Regler(label: "Ofentemperatur", wert: "\(w.ofenTemp) °C", value: $w.ofenTemp, range: 200...250, step: 5,
-                   hint: "Backen ohne Dampf: \(r.backZeit). Dampfphase bei \(r.anbackTemp) °C.")
+                   hint: "Nach der Dampfphase heruntergeschaltet, ohne Dampf: \(r.backZeit).")
         }
     }
 
@@ -290,34 +302,81 @@ struct HauptAnsicht: View {
             l.schritte.count == r.schritte.count && zip(l.schritte, r.schritte).allSatisfy { ohneZahlen($0.titel) == ohneZahlen($1.titel) }
         } ?? false
         let l = passt ? lauf : nil
-        let weiter = l?.offenAb ?? 0
-        let aktiv: Int? = (l != nil && weiter < (l?.schritte.count ?? 0)) ? weiter : nil
+        let backen = l?.phase == .backen
+        // laufender Schritt; beim Reifen der, mit dem das Backen beginnt
+        let c = l.map { backen ? $0.laufend : BackLauf.beginn }
+        let aktiv: Int? = l?.fertig == true ? nil : c
         return Card {
             CardTitle("Ablauf", hint: lauf == nil ? "T = Zeitpunkt, an dem der Sauerteig angesetzt wird. Mittelwerte der Zeitspannen." : "")
             TimelineView(.periodic(from: .now, by: 30)) { ctx in
                 let jetzt = ctx.date.timeIntervalSince1970 * 1000
+                // Schritt mit eigenem Start (Ofen), der jetzt fällig ist: klappt auf.
+                let faellig: Int? = l.flatMap { l in
+                    let n = l.laufend + 1
+                    return l.startbar(n) && l.schritte[n].at <= jetzt ? n : nil
+                }
                 VStack(spacing: 0) {
                     ForEach(Array(r.schritte.enumerated()), id: \.offset) { i, s in
-                        let erledigt = l != nil && i < weiter
+                        let erledigt = l.map { backen && i < $0.laufend } ?? false
                         AblaufAbschnitt(offen: offen == i, umschalten: { oeffne(offen == i ? -1 : i) }) {
                             VStack(alignment: .leading, spacing: 8) {
                                 Anleitung(art: s.art, r: r, w: w)
-                                if let l, i >= BackLauf.beginn, i <= weiter {
+                                if let l, let c, backen ? (l.abhakbar(i) && i <= c) : (i == BackLauf.beginn && !l.mitStart(i)) {
+                                    let n = i + 1
                                     HStack(spacing: 8) {
                                         Button {
-                                            timer.hakeAb(i)
-                                            oeffne(i + 1)
-                                        } label: { Label(erledigt ? "Aktualisieren" : "Erledigt", systemImage: "checkmark") }
+                                            if backen { timer.erledige(i) } else { timer.beginneBacken() }
+                                            oeffne(backen ? n : i)
+                                        } label: { Label(!backen ? "Backen beginnen" : (erledigt ? "Aktualisieren" : "Erledigt"), systemImage: "checkmark") }
                                             .buttonStyle(PrimaryButtonStyle(fullWidth: false))
                                         Button { abhakenUm = i } label: { Image(systemName: "clock") }
                                             .buttonStyle(SecondaryButtonStyle())
                                             .accessibilityLabel("Andere Uhrzeit")
-                                        InfoButton(text: erledigt
-                                                   ? "Aktualisieren setzt den Schritt auf jetzt, die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen."
-                                                   : "Die folgenden Schritte rücken mit. Mit der Uhr eine andere Uhrzeit wählen.")
+                                        InfoButton(text: !backen
+                                                   ? "Sobald der Sauerteig reif ist: Der Schritt beginnt jetzt, die folgenden rücken mit. Mit der Uhr eine andere Uhrzeit wählen."
+                                                   : erledigt
+                                                   ? "Aktualisieren: Der Schritt war jetzt fertig, „\(l.schritte[n].titel)“ beginnt jetzt, die folgenden rücken mit. Mit der Uhr eine andere Uhrzeit wählen."
+                                                   : "Erledigt, sobald der Schritt fertig ist: „\(l.schritte[n].titel)“ beginnt dann, die folgenden rücken mit. Bis dahin wartet der Timer. Mit der Uhr eine andere Uhrzeit wählen.")
                                     }
                                     if erledigt {
-                                        Note("Erledigt um \(BackLauf.uhrzeit(l.schritte[i].at, jetzt: jetzt)).")
+                                        Note("Fertig um \(BackLauf.uhrzeit(l.schritte[n].at, jetzt: jetzt)).")
+                                    }
+                                }
+                                // Eigener Start (Autolyse, Ofen): „Starten“, solange der Schritt davor läuft; danach
+                                // wie jeder laufende Schritt „Erledigt“ (oben).
+                                if let l, l.startbar(i), l.laufend == i - 1 {
+                                    HStack(spacing: 8) {
+                                        Button { timer.starte(i) } label: { Label("Starten", systemImage: "play.fill") }
+                                            .buttonStyle(PrimaryButtonStyle(fullWidth: false))
+                                        Button { abhakenUm = i } label: { Image(systemName: "clock") }
+                                            .buttonStyle(SecondaryButtonStyle())
+                                            .accessibilityLabel("Andere Uhrzeit")
+                                        InfoButton(text: s.art == .ofen
+                                                   ? "Starten, sobald der Ofen eingeschaltet ist. Die Stückgare läuft dabei weiter, ihre Zeit enthält das Vorheizen. „Erledigt“ beim Vorheizen beendet beides, dann wird gebacken."
+                                                   : "Starten, sobald die Autolyse angesetzt ist; damit beginnt das Backen. Der Sauerteig reift dabei weiter, seine Zeit enthält die Autolyse. „Erledigt“ bei der Autolyse beendet beides, dann kommt der Hauptteig.")
+                                    }
+                                    Note(l.schritte[i].at > jetzt
+                                         ? "Fällig um \(BackLauf.uhrzeit(l.schritte[i].at, jetzt: jetzt))."
+                                         : "Jetzt fällig.")
+                                }
+                                // Laufender Schritt: aktive Zeit
+                                if let l, let c, backen, i == c, !l.fertig {
+                                    let start = Date(timeIntervalSince1970: l.schritte[i].at / 1000)
+                                    (Text("Aktiv seit \(BackLauf.uhrzeit(l.schritte[i].at, jetzt: jetzt)) · ")
+                                     + Text(start, style: .timer).monospacedDigit())
+                                        .font(.subheadline.weight(.semibold)).foregroundStyle(Brand().accent)
+                                    if let n = l.folgt(auf: i) {
+                                        Note(l.abhakbar(i)
+                                             ? (l.schritte[n].at > jetzt
+                                                ? "Geplant bis \(BackLauf.uhrzeit(l.schritte[n].at, jetzt: jetzt))."
+                                                : "Geplante Zeit um. „Erledigt“ tippen, sobald der Schritt fertig ist.")
+                                             : "Endet mit dem Start von „\(l.schritte[n].titel)“ um ca. \(BackLauf.uhrzeit(l.schritte[n].at, jetzt: jetzt)).")
+                                    }
+                                    // Backen in zwei Stufen
+                                    if let e = l.dampfEnde, let d = l.dampf {
+                                        Note(e > jetzt
+                                             ? "Stufe 1: mit Dampf bei \(d.heiss) °C bis \(BackLauf.uhrzeit(e, jetzt: jetzt)), dann Dampf raus" + (d.heiss > d.temp ? " und auf \(d.temp) °C herunterschalten." : ".")
+                                             : "Stufe 2: ohne Dampf bei \(d.temp) °C (seit \(BackLauf.uhrzeit(e, jetzt: jetzt))).")
                                     }
                                 }
                                 if s.art == .ansetzen {
@@ -369,6 +428,7 @@ struct HauptAnsicht: View {
                         if i < r.schritte.count - 1 { RowDivider() }
                     }
                 }
+                .onChange(of: faellig, initial: true) { _, f in if let f { oeffne(f) } }
             }
             if lauf != nil && !passt {
                 Note("Der laufende Timer gehört zu anderen Einstellungen, daher hier ohne Uhrzeiten.")
@@ -390,7 +450,7 @@ struct HauptAnsicht: View {
         }
         ersetzenSicher = false
         let l = BackLauf.neu(r.schritte, start: (Date().timeIntervalSince1970 * 1000).rounded(), vorlauf: Einstellungen.vorlauf,
-                             reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0))
+                             reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0), dampf: BackLauf.dampf(r))
         Task {
             let ok = await timer.starte(l, werte: w)
             app.zeige(ok ? "Sauerteig angesetzt" : "Sauerteig angesetzt, ohne Mitteilungen", ok ? .erfolg : .fehler)

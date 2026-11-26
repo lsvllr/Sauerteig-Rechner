@@ -66,12 +66,18 @@ final class BackTimer: ObservableObject {
         await nachAenderung()
     }
 
-    func beginneBacken() { hakeAb(BackLauf.beginn) }
+    /// Sauerteig reif: der erste Backschritt beginnt um `am` (Standard jetzt).
+    func beginneBacken(am: Date? = nil) { aendere { $0.hakeAb(BackLauf.beginn, am: $1(am)) } }
 
-    /// Schritt `i` erledigt, um `am` (Standard jetzt).
-    func hakeAb(_ i: Int, am: Date? = nil) {
+    /// Schritt `i` fertig, um `am` (Standard jetzt): Der nächste beginnt dann.
+    func erledige(_ i: Int, am: Date? = nil) { aendere { $0.erledige(i, am: $1(am)) } }
+
+    /// Schritt `i` mit eigenem Start (Ofen) beginnt um `am` (Standard jetzt); der vorige endet damit.
+    func starte(_ i: Int, am: Date? = nil) { aendere { $0.starte(i, am: $1(am)) } }
+
+    private func aendere(_ f: (BackLauf, (Date?) -> Double) -> BackLauf) {
         guard let l = lauf, let uid else { return }
-        let neu = l.hakeAb(i, am: (am?.timeIntervalSince1970 ?? Date().timeIntervalSince1970) * 1000)
+        let neu = f(l) { (($0 ?? Date()).timeIntervalSince1970 * 1000).rounded() }
         guard neu != l else { return }
         db.aendereBacklauf(uid, neu)
         Task { await nachAenderung() }
@@ -96,14 +102,14 @@ final class BackTimer: ObservableObject {
     }
 
     /// Knopf „Erledigt“ in der Live-Aktivität (BackAbhakenIntent): Schritt `schritt` (Index ab „Backen beginnt“) jetzt
-    /// erledigt. `at` ist seine Zeit, wie die Aktivität sie zeigte; passt sie nicht mehr (inzwischen anders geändert),
-    /// passiert nichts. Wartet bis zum Ende (Weckdienst inklusive), sonst legt iOS die App vorher schlafen.
+    /// fertig. `at` ist seine Zeit, wie die Aktivität sie zeigte; passt sie nicht mehr (inzwischen anders geändert),
+    /// passiert nichts. Wartet bis zum Ende, sonst legt iOS die App vorher schlafen.
     func hakeAbAusAktivitaet(_ schritt: Int, at: Double) async {
         lies(animiert: false)
         let i = schritt + BackLauf.beginn
         guard let l = lauf, let uid, l.phase == .backen, l.schritte.indices.contains(i),
               l.schritte[i].at.rounded() == at.rounded() else { return }
-        let neu = l.hakeAb(i, am: now, ueberspringen: true)
+        let neu = l.erledige(i, am: now)
         guard neu != l else { return }
         db.aendereBacklauf(uid, neu)
         await nachAenderung()

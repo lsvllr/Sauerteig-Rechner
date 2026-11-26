@@ -6,12 +6,32 @@ import Foundation
 
 /// Live-Aktivität des Back-Timers (Sperrbildschirm, Dynamic Island) ab „Backen beginnen“.
 ///
-/// Inhalt getrennt: Titel und Dauer der Schritte stehen in den Attributen (fest, nur auf dem Gerät). Der
-/// `ContentState` hat nur Zeitpunkte, so braucht der Weckdienst am Server (server/wecker.ts) nichts Lesbares. Sein
-/// Push schickt genau `{"zeiten": [ms…], "aktuell": i}`; deshalb muss `ContentState` als JSON exakt dazu passen
-/// (fehlt ein Pflichtfeld, verwirft iOS das Update still). Zeiten als Zahl in ms, kein `Date`: Der Decoder von
-/// ActivityKit liest `Date` als Sekunden seit 2001.
+/// Inhalt getrennt: Titel und Dauer der Schritte stehen in den Attributen (fest, nur auf dem Gerät), der
+/// `ContentState` hat nur Zeitpunkte und Indizes. Weiter geht es nur mit dem Abhaken in der App, die dann den Stand
+/// schickt; die Uhr schaltet nichts weiter (deshalb auch kein Weckdienst mehr). Zeiten als Zahl in ms, kein `Date`:
+/// Der Decoder von ActivityKit liest `Date` als Sekunden seit 2001.
 struct BackAktivitaet: ActivityAttributes {
+    /// „Autolyse ansetzen“ (während der Sauerteig reift) und „Ofen vorheizen“ (während der Stückgare) werden in der
+    /// App gestartet und beenden den Schritt davor (siehe `BackLauf.mitStart`).
+    static func mitStart(_ titel: String) -> Bool { titel.hasPrefix("Ofen") || titel.hasPrefix("Autolyse") }
+
+    /// Backen in zwei Stufen: `min` Minuten bei `heiss` °C mit Dampf, danach bei `temp` °C ohne.
+    struct Dampf: Codable, Hashable, Sendable {
+        var min: Int
+        var heiss: Int
+        var temp: Int
+    }
+
+    /// Titel des Schritts, der in zwei Stufen läuft (`Dampf`).
+    static let backen = "Backen"
+
+    /// Kurzer Titel: „Ofen auf 220 °C vorheizen“ → „Ofen vorheizen“, „Autolyse ansetzen (vor Sauerteig-Reife)“ →
+    /// „Autolyse ansetzen“.
+    static func kurz(_ titel: String) -> String {
+        if titel.hasPrefix("Ofen") { return "Ofen vorheizen" }
+        return titel.range(of: " (").map { String(titel[..<$0.lowerBound]) } ?? titel
+    }
+
     /// „Sauerteig angesetzt“ (ms): erkennt den Lauf wieder.
     var start: Double
     /// Schritte ab „Backen beginnt“.
@@ -21,29 +41,39 @@ struct BackAktivitaet: ActivityAttributes {
     struct ContentState: Codable, Hashable, Sendable {
         /// ms je Schritt (ab „Backen beginnt“), ändert sich beim Abhaken.
         var zeiten: [Double]
-        /// Laufender Schritt laut Absender.
+        /// Laufender Schritt (bis er in der App als fertig abgehakt ist, auch nach seiner geplanten Zeit).
         var aktuell: Int
-        /// Erster noch nicht abgehakter Schritt. Nur die App kennt ihn, der Push lässt ihn weg (`nil`): dann gilt
-        /// der laufende Schritt als offen.
+        /// Erster noch nicht begonnener Schritt.
         var weiter: Int? = nil
+        /// Nur solange gebacken wird: die Stufen (Dampf ab dem Beginn des laufenden Schritts).
+        var dampf: Dampf? = nil
 
-        /// Laufender Schritt jetzt: Kam der Push zum nächsten Schritt nicht an, schiebt ihn die Uhr weiter.
-        func laufend(_ jetzt: Date) -> Int {
-            let ms = jetzt.timeIntervalSince1970 * 1000
-            let nachUhr = zeiten.lastIndex { $0 <= ms } ?? 0
-            return min(max(aktuell, nachUhr, 0), max(zeiten.count - 1, 0))
-        }
+        /// Laufender Schritt, auf die Zeiten begrenzt.
+        var laufend: Int { min(max(aktuell, 0), max(zeiten.count - 1, 0)) }
 
-        /// Knopf „Erledigt“ für Schritt `i`: nicht beim letzten (auskühlen) und nicht, wenn schon abgehakt.
-        func abhakbar(_ i: Int) -> Bool { i + 1 < zeiten.count && i >= (weiter ?? 0) }
-
-        /// Index des nächsten Schritts nach `i`, `nil` = `i` ist der letzte (fertig gebacken, auskühlen).
+        /// Index des Schritts nach `i`, `nil` = `i` ist der letzte (fertig gebacken, auskühlen).
         func naechster(nach i: Int) -> Int? { i + 1 < zeiten.count ? i + 1 : nil }
 
         func datum(_ i: Int) -> Date { Date(timeIntervalSince1970: zeiten[i] / 1000) }
+
+        /// Ende der Stufe mit Dampf (laufender Schritt ist das Backen).
+        var dampfEnde: Date? {
+            guard let d = dampf, zeiten.indices.contains(laufend) else { return nil }
+            return datum(laufend).addingTimeInterval(Double(d.min) * 60)
+        }
+
+        /// Noch in der Stufe mit Dampf.
+        func mitDampf(_ jetzt: Date) -> Bool { dampfEnde.map { jetzt < $0 } ?? false }
+
+        /// Worauf der Countdown zählt: das Ende der Dampf-Stufe, sonst der Beginn des nächsten Schritts.
+        func ziel(_ jetzt: Date) -> Date? {
+            if let e = dampfEnde, jetzt < e { return e }
+            return naechster(nach: laufend).map(datum)
+        }
     }
 
-    func titel(_ i: Int) -> String { titel.indices.contains(i) ? titel[i] : "" }
+    /// Titel für die Anzeige, kurz („Ofen vorheizen“ ohne Temperatur).
+    func titel(_ i: Int) -> String { titel.indices.contains(i) ? Self.kurz(titel[i]) : "" }
     func dauer(_ i: Int) -> String { dauer.indices.contains(i) ? dauer[i] : "" }
 }
 

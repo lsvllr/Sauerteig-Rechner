@@ -8,11 +8,16 @@ Server, ohne Konto und ohne Ladeanzeige. Umgesetzt sind die Stufen 1–5 aus Abs
    (6 s Rückgängig), Füttern mit Rhythmus und lokaler Erinnerung (Uhrzeit in den
    Einstellungen oben rechts, Standard 8 Uhr; dort auch Mitteilungen und Live-Aktivität ein-/ausschalten).
 2. **Back-Timer:** „Sauerteig angesetzt“ (Startzeit auch rückwirkend), „Backen beginnen“, Abhaken (auch mit
-   anderer Uhrzeit über die Uhr daneben), Vorwarnung, lokale Mitteilungen auch bei geschlossener App.
-3. **Live-Aktivität** ab „Backen beginnen“ auf Sperrbildschirm und Dynamic Island, mit Countdown, Fortschritt und
-   Knopf „Erledigt“ (läuft im Prozess der App, auch ohne Netz).
-4. **Weckdienst:** Der Node-Server dieses Repos (`/api/wecker`, `server/wecker.ts`) schaltet die Aktivität per
-   APNs zu jedem Schritt weiter, auch bei geschlossener App. Er kennt nur Push-Token und Uhrzeiten, keine Rezepte.
+   anderer Uhrzeit über die Uhr daneben), Vorwarnung, lokale Mitteilungen auch bei geschlossener App. „Erledigt“
+   heißt: Der Schritt ist fertig, der nächste beginnt jetzt. Der Timer bleibt beim laufenden Schritt, bis er
+   abgehakt ist. Autolyse (während der Sauerteig reift) und Ofen vorheizen (während der Stückgare)
+   werden gestartet, sobald sie fällig sind; die Zeit des Schritts davor enthält sie, und ihr „Erledigt“ beendet
+   beides. Der Start der Autolyse beginnt zugleich das Backen. Das Backen läuft in zwei Stufen (mit Dampf bei voller
+   Hitze, dann heruntergeschaltet ohne Dampf), mit eigener Mitteilung zum Wechsel.
+3. **Live-Aktivität** ab „Backen beginnen“ auf Sperrbildschirm und Dynamic Island, mit Countdown und Fortschritt.
+   Sie folgt dem Abhaken in der App und schaltet nicht von selbst weiter.
+4. **Weckdienst:** `/api/wecker` (`server/wecker.ts`) schaltete früher die Aktivität per APNs weiter; die App
+   meldet sich dort nicht mehr an, seit der Timer aufs Abhaken wartet.
 
 5. **Abgleich zwischen Geräten** (`App/Abgleich.swift`, gleiches Protokoll wie die Web-App `src/abgleich.ts`): nur
    mit Konto, verknüpft in den Einstellungen per Gerätecode (oder neues Konto per Einladungscode). Der Server ist
@@ -75,7 +80,7 @@ Exportfrage zur Verschlüsselung beantwortet `ITSAppUsesNonExemptEncryption = NO
 
 ## Weckdienst am Server
 
-Im Home-Assistant-Add-on die Einstellungen `apns_key_id`, `apns_team_id`, `apns_topic`
+Von der App nicht mehr benutzt (siehe oben), nur noch für ältere Versionen. Im Home-Assistant-Add-on die Einstellungen `apns_key_id`, `apns_team_id`, `apns_topic`
 (`de.eliasvollrath.sauerteig`) und `apns_key` (Inhalt der `.p8`) setzen, siehe `ha-addon/sauerteig/DOCS.md`.
 Schlüssel: developer.apple.com > Keys > „Apple Push Notifications service“. Ohne APNs schaltet die Aktivität nur
 weiter, wenn die App läuft (oder beim Erreichen von `staleDate` rechnet die Ansicht den Schritt aus der Uhr).
@@ -88,7 +93,7 @@ Ablauf: Die App meldet `POST /api/wecker {token: "apns:<hex>", zeiten: [ms…]}`
 ```
 Sauerteig/
   App/     Einstieg + AppDelegate (verdrahtet „Erledigt“ und Datenbank-Änderungen), AppState (Toast, Adressen),
-           BackTimer, BackLive (Live-Aktivität + Weckdienst-Client), Mitteilungen, Einstellungen, Abgleich (Konto,
+           BackTimer, BackLive (Live-Aktivität), Mitteilungen, Einstellungen, Abgleich (Konto,
            Sitzungs-Schlüssel im Schlüsselbund, /api/sync), Sicherung (CloudKit)
   Core/    Datenbank (uid, Feldzeiten, Löschmarken, hybride Uhr, ausstehende Änderungen), Daten (Rezepte, Füttern,
            Back-Lauf als Tabellen), BackLauf (Regeln), Rechner
@@ -119,8 +124,8 @@ Die Einstellungen des Rechners (Regler) sind gerätelokal (UserDefaults).
 
 ## Prüfen
 
-- `ios/Tools/pruefe_kern.sh`: Uhr, Datenbank-Zusammenführung, Rezept-Rundreise, Abhaken, ContentState, das
-  Push-JSON des Weckdienstes, Schnappschuss/Quittieren und Sicherungs-Rundreise.
+- `ios/Tools/pruefe_kern.sh`: Uhr, Datenbank-Zusammenführung, Rezept-Rundreise, Abhaken, Ofen starten,
+  ContentState (auch ältere Stände), Schnappschuss/Quittieren und Sicherungs-Rundreise.
 - Live-Aktivität und Mitteilungen nur auf einem echten Gerät sinnvoll testbar.
 
 Offen (LOCAL-FIRST.md 6.8): ob AlarmKit (iOS 26) Back-Schritte als Systemwecker abbilden kann.

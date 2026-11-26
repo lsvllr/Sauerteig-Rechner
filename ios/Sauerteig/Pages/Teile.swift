@@ -104,7 +104,7 @@ struct Anleitung: View {
                       + ["Mit feuchten Händen rundwirken, in einen bemehlten Gärkorb legen.",
                          "Stückgare bei \(w.gareTemp) °C: **\(r.stueckgare)**. Fertig, wenn eine Delle nur zur Hälfte zurückfedert."])
             case .ofen:
-                steps(["Ofen auf **\(r.ofenTemp) °C** vorheizen (30-40 Min), mittlere Schiene.",
+                steps(["Noch während der Stückgare: Ofen auf **\(r.anbackTemp) °C** vorheizen (30-40 Min), mittlere Schiene. So sind Teig und Ofen zugleich bereit.",
                        "Schüssel zum Abdecken oder ein Gefäß für Wasser (Schwaden) bereitstellen."])
             case .backen:
                 steps(["Stürzen und kreuzförmig einschneiden.",

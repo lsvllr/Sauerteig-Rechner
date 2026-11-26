@@ -213,11 +213,14 @@ struct Backeintrag: Identifiable, Hashable {
         return teile.isEmpty ? "Eigene Mischung" : teile.joined(separator: " · ")
     }
 
-    /// Reifezeit des Sauerteigs in Minuten: geplant (Spanne aus dem Rechner) und tatsächlich (bis „Backen beginnen“).
+    /// Reifezeit des Sauerteigs in Minuten: geplant (Spanne aus dem Rechner) und tatsächlich (bis „Backen beginnen“;
+    /// mit Autolyse bis zu deren Ende, die Reifezeit enthält sie).
     var reife: (geplant: (Int, Int)?, tatsaechlich: Int?) {
         let g = mengen.flatMap { Rechner.spanne($0.sauerteigZeit) }
-        guard let l = verlauf, l.offenAb > BackLauf.beginn, l.schritte.count > BackLauf.beginn else { return (g, nil) }
-        return (g, Int(((l.schritte[BackLauf.beginn].at - l.start) / BackLauf.min).rounded()))
+        guard let l = verlauf else { return (g, nil) }
+        let r = l.mitStart(BackLauf.beginn) ? BackLauf.beginn + 1 : BackLauf.beginn
+        guard l.offenAb > r, l.schritte.count > r else { return (g, nil) }
+        return (g, Int(((l.schritte[r].at - l.start) / BackLauf.min).rounded()))
     }
 }
 
@@ -231,12 +234,17 @@ extension Datenbank {
         return f
     }()
 
+    /// Zeitmodell des Verlaufs: 2 = `at` ist der Beginn eines Schritts. Ohne: älterer Eintrag, abgehakte Zeiten sind
+    /// das Ende eines Schritts; wird beim Lesen umgerechnet (`BackLauf.ausAltemModell`), gespeichert bleibt er, wie er ist.
+    private static let zeitmodell = 2
+
     private static func eintrag(_ uid: String, _ z: Zeile) -> Backeintrag? {
         guard let e = z["einstellungen"]?.json([String: Wert].self) else { return nil }
         let werte = SauerteigWerte(einstellungen: e)
         let ms = z["gebacken"]?.zahl ?? 0
+        let verlauf = z["verlauf"]?.json(BackLauf.self).map { z["zeitmodell"]?.int == zeitmodell ? $0 : $0.ausAltemModell() }
         return Backeintrag(id: uid, eigenerName: z["name"]?.text ?? "", gebacken: Date(timeIntervalSince1970: ms / 1000),
-                           werte: werte, mengen: z["mengen"]?.json(Mengen.self), verlauf: z["verlauf"]?.json(BackLauf.self),
+                           werte: werte, mengen: z["mengen"]?.json(Mengen.self), verlauf: verlauf,
                            bewertung: min(max(z["bewertung"]?.int ?? 0, 0), 5),
                            kriterien: z["kriterien"]?.json(Kriterien.self) ?? Kriterien(), notiz: z["notiz"]?.text ?? "",
                            bilder: z["bilder"]?.json([String].self) ?? [], analyse: z["analyse"]?.json(KrumenAnalyse.self))
@@ -260,7 +268,10 @@ extension Datenbank {
             "einstellungen": .json(w.einstellungen),
             "mengen": .json(Mengen(Rechner.rezept(w.eingabe))),
         ]
-        if let verlauf { felder["verlauf"] = .json(verlauf) }
+        if let verlauf {
+            felder["verlauf"] = .json(verlauf)
+            felder["zeitmodell"] = .zahl(Double(Self.zeitmodell))
+        }
         schreibe(Self.eintragTabelle, uid, felder, jetzt: jetzt)
         return uid
     }
@@ -316,12 +327,12 @@ extension Datenbank {
         zeile(BackLauf.tabelle, uid)?["einstellungen"]?.json([String: Wert].self).map { SauerteigWerte(einstellungen: $0) }
     }
 
-    /// Fertig gebackener Lauf (Backen begonnen, alle Schritte vorbei) → Eintrag mit derselben uid. Zwei Geräte, die
-    /// ihn gleichzeitig abräumen, schreiben so in dieselbe Zeile. Vor `beendeBacklauf` aufrufen. Rückgabe: uid des
+    /// Fertig gebackener Lauf (Backen abgehakt oder alle Schritte vorbei) → Eintrag mit derselben uid. Zwei Geräte,
+    /// die ihn gleichzeitig abräumen, schreiben so in dieselbe Zeile. Vor `beendeBacklauf` aufrufen. Rückgabe: uid des
     /// Eintrags oder nil (nicht fertig, ohne Einstellungen, schon gelöscht).
     @discardableResult
     func eintragAusLauf(_ uid: String, _ l: BackLauf, jetzt: Double) -> String? {
-        guard l.phase == .backen, l.naechster(jetzt) == -1, let w = einstellungenZuLauf(uid) else { return nil }
+        guard l.fertig || l.phase == .backen && l.naechster(jetzt) == -1, let w = einstellungenZuLauf(uid) else { return nil }
         if let alt = tabellen[Self.eintragTabelle]?[uid] { return alt.geloescht ? nil : uid }
         let ende = Date(timeIntervalSince1970: (l.schritte.last?.at ?? jetzt) / 1000)
         return legeEintragAn(w, verlauf: l, gebacken: ende, uid: uid)

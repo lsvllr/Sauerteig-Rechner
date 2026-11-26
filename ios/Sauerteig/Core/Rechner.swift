@@ -112,6 +112,8 @@ struct Eingabe: Sendable {
     var anteile: Anteile
     var teigTeilen: Bool
     var ofenTemp: Int = 220
+    /// Anbacken mit Dampf (°C); nil = Ofentemperatur + 30, höchstens 250
+    var anbackTemp: Int? = nil
 }
 
 struct Berechnung: Sendable {
@@ -136,6 +138,17 @@ struct Berechnung: Sendable {
 enum Rechner {
     /// Hauptteig mischen und kneten, danach beginnt die erste Gare.
     static let hauptteigDauer = "10 Min"
+    /// Anbacktemperatur: gewählt (nie unter der Ofentemperatur) oder wie früher Ofentemperatur + 30, höchstens 250.
+    static func anbackTemp(ofen: Int, gewaehlt: Int?) -> Int { max(ofen, gewaehlt ?? min(250, ofen + 30)) }
+
+    /// Dampfphase in Minuten: 15 (zwei Brote 10) bei 250 °C, heißer kürzer, kühler länger, wie bei Pizza. Die Hitze
+    /// wirkt mit dem Abstand zum Siedepunkt im Teig (T − 100), überproportional (hoch 1,5): 350 °C → 7 Min,
+    /// 300 °C → 10 Min, 230 °C → 19 Min. Die Arbeit der Dampfphase bleibt so gleich, die Zeit danach ändert sich nicht.
+    static func dampfMinuten(_ anback: Int, teigTeilen: Bool) -> Int {
+        let basis = teigTeilen ? 10.0 : 15.0
+        return max(3, jsRound(basis * pow(150 / Double(max(anback - 100, 50)), 1.5)))
+    }
+
     static func optimaleHydration(_ a: Anteile) -> Int {
         jsRound(Double(a.roggen * 75 + a.dinkel * 78 + a.weizen * 72 + a.buchweizen * 85) / 100)
     }
@@ -230,11 +243,11 @@ enum Rechner {
         let ersteGare = zeitplan(22).gareZeit
         let einzel = e.teigTeilen ? Double(teig) / 2 : Double(teig)
         let ofen = e.ofenTemp
-        let anback = min(250, ofen + 30)
+        let anback = Self.anbackTemp(ofen: ofen, gewaehlt: e.anbackTemp)
         let basis: (Double, Double) = einzel <= 900 ? (22, 26) : einzel <= 1500 ? (28, 32) : (33, 38)
         let faktor = 1 + Double(220 - ofen) * 0.007
         let backZeit = "\(jsRound(basis.0 * faktor))-\(jsRound(basis.1 * faktor)) Min"
-        let dampf = e.teigTeilen ? 10 : 15
+        let dampf = Self.dampfMinuten(anback, teigTeilen: e.teigTeilen)
         let sgBase: Double = a.roggen >= 80 ? 45 : a.roggen >= 60 ? 60 : 90
         let sgF: Double = e.gareTemp >= 28 ? 0.75 : e.gareTemp >= 24 ? 1.0 : 1.15
         let sgMin = jsRound(sgBase * sgF)
@@ -259,7 +272,8 @@ enum Rechner {
         s.append(Schritt(t: tMischen, titel: "Hauptteig", dauer: Self.hauptteigDauer, art: .mischen))
         s.append(Schritt(t: tGare, titel: "Erste Gare", dauer: ersteGare, art: .gare))
         s.append(Schritt(t: tFormen, titel: "Formen, Stückgare", dauer: stueckgare, art: .formen))
-        s.append(Schritt(t: tOfen, titel: "Ofen auf \(ofen) °C vorheizen", dauer: "30-40 Min", art: .ofen))
+        // auf die volle Hitze der Dampfphase vorheizen
+        s.append(Schritt(t: tOfen, titel: "Ofen auf \(anback) °C vorheizen", dauer: "30-40 Min", art: .ofen))
         s.append(Schritt(t: tBacken, titel: "Backen", dauer: "\(bz.0 + dampf)-\(bz.1 + dampf) Min", art: .backen))
         s.append(Schritt(t: tAus, titel: "Auskühlen", dauer: "min. 2h", art: .auskuehlen))
         let (krume, geschmack, haltbarkeit) = eigenschaften(a)
@@ -283,6 +297,15 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
     var custom = Anteile(roggen: 70, dinkel: 20, weizen: 10)
     var teigTeilen = false
     var ofenTemp = 220
+    /// Gewählte Anbacktemperatur (Dampfphase); nil = automatisch (`Rechner.anbackTemp`). Optional, damit ältere
+    /// gespeicherte Werte ohne dieses Feld lesbar bleiben.
+    var anbackTempWahl: Int? = nil
+
+    /// Anbacktemperatur, zum Einstellen (setzt die Wahl).
+    var anbackTemp: Int {
+        get { Rechner.anbackTemp(ofen: ofenTemp, gewaehlt: anbackTempWahl) }
+        set { anbackTempWahl = newValue }
+    }
 
     var anteile: Anteile {
         mischung == "custom" ? custom : (SauerteigDaten.mischung(mischung)?.anteile ?? Anteile(roggen: 70, dinkel: 20, weizen: 10))
@@ -290,12 +313,12 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
 
     var eingabe: Eingabe {
         Eingabe(anstellgut: anstellgut, sauerteigTemp: sauerteigTemp, gareTemp: gareTemp, brotGroesse: brotGroesse,
-                hydration: hydration, anteile: anteile, teigTeilen: teigTeilen, ofenTemp: ofenTemp)
+                hydration: hydration, anteile: anteile, teigTeilen: teigTeilen, ofenTemp: ofenTemp, anbackTemp: anbackTempWahl)
     }
 
     /// `alsEinstellungen` der Web-App: Zahlen als Text, damit gespeicherte Rezepte zwischen Web und App gleich sind.
     var einstellungen: [String: Wert] {
-        [
+        var e: [String: Wert] = [
             "anstellgut": .text(String(anstellgut)), "sauerteigTemp": .text(String(sauerteigTemp)),
             "gareTemp": .text(String(gareTemp)), "brotGroesse": .text(String(brotGroesse)),
             "hydration": .text(String(hydration)), "mehlMischung": .text(mischung),
@@ -303,6 +326,8 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
             "customWeizen": .text(String(custom.weizen)), "customBuchweizen": .text(String(custom.buchweizen)),
             "teigTeilen": .bool(teigTeilen), "ofenTemp": .text(String(ofenTemp)),
         ]
+        if let a = anbackTempWahl { e["anbackTemp"] = .text(String(a)) }
+        return e
     }
 
     init() {}
@@ -322,6 +347,7 @@ struct SauerteigWerte: Codable, Hashable, Sendable {
                          weizen: n("customWeizen", d.custom.weizen), buchweizen: n("customBuchweizen", d.custom.buchweizen))
         teigTeilen = e["teigTeilen"]?.bool ?? false
         ofenTemp = n("ofenTemp", d.ofenTemp)
+        anbackTempWahl = e["anbackTemp"]?.int
     }
 }
 

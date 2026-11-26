@@ -17,20 +17,24 @@ struct BackAktivitaetMuster: Identifiable {
     private static let min = 60_000.0
 
     /// Lauf zu den Einstellungen `w`, Zeiten so verschoben, dass Schritt `i` (ab „Backen beginnt“) läuft und der
-    /// nächste in `rest` Minuten kommt (beim letzten: seit `rest` Minuten). `aktuell`: was der letzte Push meldete.
-    static func muster(_ name: String, _ w: SauerteigWerte = SauerteigWerte(), laufend i: Int, rest: Double,
-                       aktuell: Int? = nil) -> BackAktivitaetMuster {
+    /// nächste in `rest` Minuten kommt (negativ: Zeit seit `-rest` Minuten um; beim letzten: seit `rest` Minuten).
+    static func muster(_ name: String, _ w: SauerteigWerte = SauerteigWerte(), laufend i: Int, rest: Double) -> BackAktivitaetMuster {
         let jetzt = Date().timeIntervalSince1970 * 1000
         let r = Rechner.rezept(w.eingabe)
         let l = BackLauf.neu(r.schritte, start: 0, vorlauf: 10, reife: Rechner.spanne(r.zeitplan.sauerteigZeit) ?? (0, 0))
-        var z = l.schritte.dropFirst(BackLauf.beginn).map(\.at)
+        var st = BackLive.stand(l)
+        var z = st.zeiten
         let i = Swift.min(i, z.count - 1)
-        let verschiebung = i + 1 < z.count ? jetzt + rest * min - z[i + 1] : jetzt - rest * min - z[i]
+        let verschiebung = st.naechster(nach: i).map { jetzt + rest * min - z[$0] } ?? jetzt - rest * min - z[i]
         z = z.map { ($0 + verschiebung).rounded() }
         var la = l
         la.start = (z[0] - 9 * 60 * min).rounded()
-        return BackAktivitaetMuster(name: name, a: BackLive.attribute(la),
-                                    state: .init(zeiten: z, aktuell: aktuell ?? i, weiter: i))
+        st.zeiten = z
+        st.aktuell = i
+        st.weiter = i + 1
+        // Backen: Stufen mit/ohne Dampf
+        st.dampf = la.schritte[i + BackLauf.beginn].titel == BackAktivitaet.backen ? BackLauf.dampf(r) : nil
+        return BackAktivitaetMuster(name: name, a: BackLive.attribute(la), state: st)
     }
 
     /// Jeder Schritt des Standard-Rezepts (Roggen Optimal, mit Autolyse), dazu Sonderfälle.
@@ -43,8 +47,12 @@ struct BackAktivitaetMuster: Identifiable {
             let titel = r.schritte[i + BackLauf.beginn].titel
             out.append(muster("Läuft: \(titel)", w, laufend: i, rest: Swift.max(1, ((z[i + 1] - z[i]) / 2).rounded())))
         }
+        if let b = r.schritte.dropFirst(BackLauf.beginn).firstIndex(where: { $0.titel == BackAktivitaet.backen }) {
+            let i = b - BackLauf.beginn
+            out.append(muster("Backen, Stufe mit Dampf", w, laufend: i, rest: z[i + 1] - z[i] - 5))
+        }
         out.append(muster("Nächster Schritt in unter 1 Min", w, laufend: 1, rest: 0.5))
-        out.append(muster("Push verpasst (Uhr schaltet weiter)", w, laufend: 1, rest: 60, aktuell: 0))
+        out.append(muster("Zeit um, wartet aufs Abhaken", w, laufend: 1, rest: -10))
         out.append(muster("Fertig gebacken", w, laufend: z.count - 1, rest: 5))
         var roggen = w
         roggen.mischung = "roggen-pur"
