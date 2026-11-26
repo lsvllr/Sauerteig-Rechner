@@ -84,6 +84,15 @@ db.exec(`
     konto_id INTEGER PRIMARY KEY REFERENCES konten(id) ON DELETE CASCADE,
     kennung TEXT NOT NULL
   );
+  -- Fotos des Backtagebuchs im Abgleich (wie dort nur ab zwei Geräten): verschlüsselt mit dem Kontoschlüssel
+  -- (base64 nonce ‖ Geheimtext ‖ Tag), der Server kann sie nicht ansehen. id = uid des Fotos auf dem Gerät.
+  CREATE TABLE IF NOT EXISTS bilder (
+    konto_id INTEGER NOT NULL REFERENCES konten(id) ON DELETE CASCADE,
+    id TEXT NOT NULL,
+    daten TEXT NOT NULL,
+    erstellt INTEGER NOT NULL,
+    PRIMARY KEY (konto_id, id)
+  );
 `);
 
 /** Spalten, die später dazukamen. */
@@ -303,6 +312,33 @@ export function beanspruche(kontoId: number, id: string): string {
 export function leereAbgleich(kontoId: number): void {
   tue('DELETE FROM abgleich WHERE konto_id = ?', kontoId);
   tue('DELETE FROM abgleich_kennung WHERE konto_id = ?', kontoId);
+  tue('DELETE FROM bilder WHERE konto_id = ?', kontoId);
+}
+
+/* ------------------------------------------------------------------ Fotos */
+
+export const MAX_BILDER = 1000;
+/** Summe der Fotos je Konto (Zeichen Base64, gut 300 MB). */
+export const MAX_BILDER_ZEICHEN = 400_000_000;
+
+export function speichereBild(kontoId: number, id: string, daten: string): Ergebnis<null> {
+  const s = eine<{ n: number; summe: number | null }>(
+    'SELECT COUNT(*) AS n, SUM(LENGTH(daten)) AS summe FROM bilder WHERE konto_id = ? AND id != ?',
+    kontoId,
+    id,
+  )!;
+  if (s.n >= MAX_BILDER || (s.summe ?? 0) + daten.length > MAX_BILDER_ZEICHEN)
+    return { ok: false, fehler: 'Zu viele Fotos im Abgleich' };
+  tue('INSERT OR REPLACE INTO bilder (konto_id, id, daten, erstellt) VALUES (?, ?, ?, ?)', kontoId, id, daten, Date.now());
+  return { ok: true, wert: null };
+}
+
+export function bild(kontoId: number, id: string): string | null {
+  return eine<{ daten: string }>('SELECT daten FROM bilder WHERE konto_id = ? AND id = ?', kontoId, id)?.daten ?? null;
+}
+
+export function loescheBilder(kontoId: number, ids: string[]): void {
+  for (const id of ids) tue('DELETE FROM bilder WHERE konto_id = ? AND id = ?', kontoId, id);
 }
 
 /** Änderungen nach `ab`, höchstens `max`. */

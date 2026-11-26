@@ -45,6 +45,19 @@ enum Verschluesselung {
         return aus
     }
 
+    // MARK: Fotos
+
+    /// Foto des Tagebuchs (JPEG) für `/api/bild`: `base64(nonce 12 ‖ Geheimtext ‖ Tag 16)`, an die ID gebunden.
+    static func verschluesseleBild(_ k: Data, id: String, _ daten: Data) throws -> String {
+        let box = try AES.GCM.seal(daten, using: SymmetricKey(data: k), authenticating: Data("bild\n\(id)".utf8))
+        return box.combined!.base64EncodedString()
+    }
+
+    static func entschluesseleBild(_ k: Data, id: String, _ x: String) -> Data? {
+        guard let d = Data(base64Encoded: x), let box = try? AES.GCM.SealedBox(combined: d) else { return nil }
+        return try? AES.GCM.open(box, using: SymmetricKey(data: k), authenticating: Data("bild\n\(id)".utf8))
+    }
+
     // MARK: Gerätecode
 
     static func neuesGeheimnis() -> String {

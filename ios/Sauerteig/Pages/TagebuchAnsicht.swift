@@ -67,11 +67,13 @@ extension View {
 struct TagebuchAnsicht: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var db: Datenbank
+    @EnvironmentObject private var abgleich: Abgleich
     @State private var pfad: [String] = []
     @State private var ausgeblendet: Set<String> = []
 
     var body: some View {
         let eintraege = db.backeintraege.filter { !ausgeblendet.contains($0.id) }
+        let _ = abgleich.bilderStand // neu angekommene Fotos zeigen
         NavigationStack(path: $pfad) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
@@ -115,7 +117,10 @@ struct TagebuchAnsicht: View {
                                    zurueck: { _ = withAnimation(Metrics.move) { ausgeblendet.remove(e.id) } },
                                    endgueltig: {
                                        db.loescheEintrag(e.id)
-                                       e.bilder.forEach(Bilder.loesche)
+                                       for id in e.bilder {
+                                           Bilder.loesche(id)
+                                           abgleich.loescheBild(id)
+                                       }
                                    })
     }
 }
@@ -245,6 +250,7 @@ struct EintragAnsicht: View {
     private static let maxBilder = 8
 
     var body: some View {
+        let _ = abgleich.bilderStand // neu angekommene Fotos zeigen
         Group {
             if let e = db.backeintrag(uid) {
                 ScrollView {
@@ -352,7 +358,9 @@ struct EintragAnsicht: View {
                     }
                 }
                 if e.bilder.contains(where: { !Bilder.vorhanden($0) }) {
-                    Note("Fotos mit Wolke liegen auf einem anderen Gerät.")
+                    Note(abgleich.konto == nil
+                         ? "Fotos mit Wolke liegen auf einem anderen Gerät."
+                         : "Fotos mit Wolke kommen, sobald das Gerät, auf dem sie aufgenommen wurden, online war.")
                 }
             }
             if e.bilder.count < Self.maxBilder {
@@ -422,6 +430,7 @@ struct EintragAnsicht: View {
         let jetzt = db.backeintrag(uid)?.bilder ?? e.bilder
         db.setzeBilder(uid, jetzt.filter { $0 != id })
         Bilder.loesche(id)
+        abgleich.loescheBild(id)
     }
 
     // MARK: Bewertung, Notiz

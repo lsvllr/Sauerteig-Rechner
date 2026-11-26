@@ -33,6 +33,9 @@ const MAX_BODY = 16_000;
 /** Senden im Abgleich: bis zu 500 Änderungen je Anfrage; Tagebuch-Einträge (Notiz, Analyse, Verlauf) sind größer
  *  als Rezepte, beim ersten Senden eines Geräts kommen viele auf einmal. */
 const MAX_BODY_SENDEN = 8_000_000;
+/** Ein Foto (lange Seite 2048 px, JPEG) verschlüsselt und als Base64, mit Luft. */
+const MAX_BILD = 6_000_000;
+const BILD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SITZUNG = 'sd_sitzung';
 const ADMIN = 'sd_admin';
 const ADMIN_DAUER = 12 * 3600_000;
@@ -471,6 +474,32 @@ async function api(req: IncomingMessage, res: ServerResponse, pfad: string): Pro
     if (!r.ok) return fehler(res, 413, r.fehler);
     if (r.wert > 0) benachrichtige(konto.id, token!);
     return json(res, 200, { ok: true, kennung: k, geraete, angenommen: true });
+  }
+
+  // Fotos des Backtagebuchs (iOS, Abgleich.gleicheBilderAb): wie der Abgleich nur ab zwei Geräten, mit derselben
+  // Kennung und demselben Schlüssel; sonst ``angenommen: false`` (das Gerät holt dann erst und sendet später).
+  if (pfad === '/api/bild' && m === 'POST') {
+    const d = await lies(req, MAX_BILD);
+    if (!istText(d.id, 40) || !BILD_ID.test(d.id) || !istText(d.x, MAX_BILD) || !BASE64.test(d.x))
+      return fehler(res, 400, 'Foto nicht lesbar');
+    const geraete = db.geraete(konto.id);
+    if (d.kennung !== db.kennung(konto.id) || geraete < 2 || !istText(d.schluessel, 20) || d.schluessel !== db.schluesselId(konto.id))
+      return json(res, 200, { ok: true, angenommen: false });
+    const r = db.speichereBild(konto.id, d.id, d.x);
+    if (!r.ok) return fehler(res, 413, r.fehler);
+    benachrichtige(konto.id, token!);
+    return json(res, 200, { ok: true, angenommen: true });
+  }
+  const bildPfad = /^\/api\/bild\/([0-9a-f-]{36})$/.exec(pfad);
+  if (bildPfad && m === 'GET') {
+    const x = BILD_ID.test(bildPfad[1]!) ? db.bild(konto.id, bildPfad[1]!) : null;
+    return x ? json(res, 200, { ok: true, x }) : fehler(res, 404, 'Foto nicht da');
+  }
+  if (pfad === '/api/bild/loeschen' && m === 'POST') {
+    const d = await lies(req);
+    const ids = Array.isArray(d.ids) ? d.ids.filter((i): i is string => typeof i === 'string' && BILD_ID.test(i)).slice(0, 200) : [];
+    db.loescheBilder(konto.id, ids);
+    return json(res, 200, { ok: true });
   }
 
   // KI-Analyse der Krume (server/ki.ts): Fotos und Angaben gehen an Gemini, gespeichert wird nichts.

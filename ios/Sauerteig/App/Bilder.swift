@@ -1,9 +1,9 @@
 import SwiftUI
 import UIKit
 
-/// Fotos der Tagebuch-Einträge: nur auf diesem Gerät, als JPEG in Application Support/bilder (groß: lange Seite
-/// 2048 px, klein: 480 px für Listen). Im Eintrag stehen nur die IDs; andere Geräte des Kontos sehen den Eintrag,
-/// aber ohne die Fotos (Abgleich der Fotos folgt später). Nicht in der iCloud-Sicherung.
+/// Fotos der Tagebuch-Einträge als JPEG in Application Support/bilder (groß: lange Seite 2048 px, klein: 480 px für
+/// Listen). Im Eintrag stehen nur die IDs; die Fotos selbst gleicht `Abgleich.gleicheBilderAb` verschlüsselt über
+/// `/api/bild` ab (nur mit Konto ab zwei Geräten). Nicht in der iCloud-Sicherung.
 enum Bilder {
     nonisolated(unsafe) private static let cache = NSCache<NSString, UIImage>()
 
@@ -35,6 +35,22 @@ enum Bilder {
             return nil
         }
         return id
+    }
+
+    /// Großes Foto, wie es auf dem Gerät liegt (für den Abgleich).
+    static func rohdaten(_ id: String) -> Data? { url(id, klein: false).flatMap { try? Data(contentsOf: $0) } }
+
+    /// Foto aus dem Abgleich (großes JPEG) unter seiner ID ablegen; das kleine entsteht daraus.
+    static func uebernimm(_ daten: Data, id: String) -> Bool {
+        guard let b = UIImage(data: daten), let klein = verkleinert(b, lang: 480).jpegData(compressionQuality: 0.7),
+              let ug = url(id, klein: false), let uk = url(id, klein: true) else { return false }
+        do {
+            try daten.write(to: ug, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            try klein.write(to: uk, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        } catch {
+            return false
+        }
+        return true
     }
 
     static func lade(_ id: String, klein: Bool = true) -> UIImage? {

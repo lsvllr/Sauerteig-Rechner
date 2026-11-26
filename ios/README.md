@@ -32,8 +32,8 @@ Server, ohne Konto und ohne Ladeanzeige. Umgesetzt sind die Stufen 1–5 aus Abs
 6. **Backtagebuch** (Tab „Tagebuch“, `Core/Tagebuch.swift`, `Pages/TagebuchAnsicht.swift`): Jedes gesicherte Rezept
    und jedes fertig gebackene Brot (Timer bis zum Ende, dann „Schließen“) ist ein Eintrag mit allen Einstellungen,
    Mengen und tatsächlichen Zeiten. Name aus der Mehlmischung, auf Wunsch eigener. Bewertung (gesamt und Krume,
-   Kruste, Ofentrieb, Geschmack), Notiz, bis zu 8 Fotos (nur auf dem Gerät, `App/Bilder.swift`; noch nicht im
-   Abgleich und nicht in der iCloud-Sicherung). „Nochmal backen“ lädt die Einstellungen in den Rechner. Alte
+   Kruste, Ofentrieb, Geschmack), Notiz, bis zu 8 Fotos (`App/Bilder.swift`). Mit Konto ab zwei Geräten gleichen sich die
+   Fotos verschlüsselt über `/api/bild` ab (`Abgleich.gleicheBilderAb`); nicht in der iCloud-Sicherung. „Nochmal backen“ lädt die Einstellungen in den Rechner. Alte
    Rezepte (Tabelle `rezept`, auch aus der Web-App) übernimmt die App einmal als Einträge.
 7. **KI-Analyse der Krume:** Auf Knopfdruck gehen bis zu 3 Fotos und die Angaben zum Backen (dazu bis zu 3 frühere
    derselben Mischung) an `/api/ki/krume` (`server/ki.ts`). Der Server fragt Gemini mit festem Antwortschema und

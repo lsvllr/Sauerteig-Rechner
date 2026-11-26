@@ -29,6 +29,8 @@ final class Abgleich: ObservableObject {
     @Published private(set) var geraete = 0
     /// Das Konto hat einen Schlüssel, dieses Gerät nicht (oder einen anderen).
     @Published private(set) var schluesselFehlt = false
+    /// Zählt hoch, wenn Fotos aus dem Abgleich angekommen sind (die Datenbank ändert sich dabei nicht).
+    @Published private(set) var bilderStand = 0
 
     private struct Zustand: Codable {
         var kennung = ""
@@ -37,6 +39,16 @@ final class Abgleich: ObservableObject {
     }
 
     private var z: Zustand
+
+    /// Fotos: für welche Kennung des Abgleichs schon hochgeladen (neue Kennung = Server geleert: alles neu), was
+    /// am Server noch gelöscht werden muss.
+    private struct BilderZustand: Codable {
+        var kennung = ""
+        var oben: Set<String> = []
+        var weg: Set<String> = []
+    }
+
+    private var bz: BilderZustand
     private let db: Datenbank
     private var laeuft = false
     private var nochmal = false
@@ -50,6 +62,7 @@ final class Abgleich: ObservableObject {
     private static let zustandKey = "abgleich"
     private static let geraeteKey = "abgleich-geraete"
     private static let pushKey = "abgleich-push"
+    private static let bilderKey = "abgleich-bilder"
     private static let seite = 500
 
     init(db: Datenbank? = nil) {
@@ -58,6 +71,7 @@ final class Abgleich: ObservableObject {
         konto = d.data(forKey: Self.kontoKey).flatMap { try? JSONDecoder().decode(Konto.self, from: $0) }
         z = d.data(forKey: Self.zustandKey).flatMap { try? JSONDecoder().decode(Zustand.self, from: $0) } ?? Zustand()
         geraete = d.integer(forKey: Self.geraeteKey)
+        bz = d.data(forKey: Self.bilderKey).flatMap { try? JSONDecoder().decode(BilderZustand.self, from: $0) } ?? BilderZustand()
         pushGemeldet = d.string(forKey: Self.pushKey)
         // Schlüssel ohne Konto (App neu installiert, Schlüsselbund blieb): verwerfen.
         if konto == nil || Tresor.sitzung == nil {
@@ -208,6 +222,8 @@ final class Abgleich: ObservableObject {
         merke(Zustand())
         setzeGeraete(0)
         schluesselFehlt = false
+        bz = BilderZustand()
+        merkeBilder()
         vordergrund(false)
     }
 
@@ -330,6 +346,64 @@ final class Abgleich: ObservableObject {
             nochmal = false
             do { try await einmal() } catch { return } // offline: beim nächsten Anstoß
         } while nochmal && konto != nil
+        await gleicheBilderAb()
+    }
+
+    // MARK: Fotos
+
+    /// Foto entfernt (aus einem Eintrag oder mit dem Eintrag): beim nächsten Abgleich auch am Server löschen.
+    func loescheBild(_ id: String) {
+        bz.oben.remove(id)
+        bz.weg.insert(id)
+        merkeBilder()
+        nachEigenerAenderung()
+    }
+
+    private func merkeBilder() { UserDefaults.standard.set(try? JSONEncoder().encode(bz), forKey: Self.bilderKey) }
+
+    /// Nach jedem Abgleich: Gelöschte am Server löschen, eigene Fotos der Einträge hochladen, fehlende holen. Wie der
+    /// Abgleich nur ab zwei Geräten; der Server lehnt sonst ab (`angenommen: false`). Ein Foto, das ein anderes
+    /// Gerät noch nicht hochgeladen hat, fehlt (404) und kommt beim nächsten Abgleich.
+    private func gleicheBilderAb() async {
+        guard konto != nil, geraete >= 2, !schluesselFehlt, let k = Tresor.kontoSchluessel, !z.kennung.isEmpty else { return }
+        if bz.kennung != z.kennung {
+            bz.kennung = z.kennung
+            bz.oben = []
+            merkeBilder()
+        }
+        let weg = Array(bz.weg.prefix(200))
+        if !weg.isEmpty, let r = try? await rufe("api/bild/loeschen", methode: "POST", json: ["ids": weg]), r.status == 200 {
+            bz.weg.subtract(weg)
+            merkeBilder()
+        }
+        let ids = Set(db.backeintraege.flatMap(\.bilder)).subtracting(bz.weg)
+        let sid = Verschluesselung.kennung(k)
+        for id in ids.sorted() where !bz.oben.contains(id) && Bilder.vorhanden(id) {
+            let x = await Task.detached(priority: .utility) { () -> String? in
+                guard let d = Bilder.rohdaten(id) else { return nil }
+                return try? Verschluesselung.verschluesseleBild(k, id: id, d)
+            }.value
+            guard let x else { continue }
+            guard let r = try? await rufe("api/bild", methode: "POST",
+                                          json: ["id": id, "kennung": z.kennung, "schluessel": sid, "x": x], timeout: 90),
+                  r.status == 200, r.json["angenommen"] as? Bool == true else { break } // offline, voll, Kennung neu
+            bz.oben.insert(id)
+            merkeBilder()
+        }
+        var neu = false
+        for id in ids.sorted() where !Bilder.vorhanden(id) {
+            guard let r = try? await rufe("api/bild/\(id)", timeout: 60), r.status == 200,
+                  let x = r.json["x"] as? String else { continue }
+            let ok = await Task.detached(priority: .utility) { () -> Bool in
+                guard let d = Verschluesselung.entschluesseleBild(k, id: id, x) else { return false }
+                return Bilder.uebernimm(d, id: id)
+            }.value
+            guard ok else { continue }
+            bz.oben.insert(id) // liegt schon am Server
+            merkeBilder()
+            neu = true
+        }
+        if neu { bilderStand += 1 }
     }
 
     private struct Holen: Decodable {

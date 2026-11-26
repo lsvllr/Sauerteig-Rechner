@@ -44,7 +44,8 @@ Nach dem Ändern speichern und das Add-on neu starten.
 ## Daten
 
 `/data/sauerteig.db` (SQLite: Konten, Sitzungen, Push-Abos, Zeitplan laufender Back-Timer für den Push, Abgleich
-nur bei Konten mit mindestens zwei Geräten, Weckdienst: nur Push-Token und
+nur bei Konten mit mindestens zwei Geräten, dabei auch die Fotos des Backtagebuchs, verschlüsselt und je Konto
+höchstens 1000 Fotos bzw. rund 300 MB, Weckdienst: nur Push-Token und
 Uhrzeiten der Live-Aktivitäten) und `/data/vapid.json`. Beide
 sind in den HA-Backups enthalten. Während eines Backups stoppt das Add-on kurz.
 
