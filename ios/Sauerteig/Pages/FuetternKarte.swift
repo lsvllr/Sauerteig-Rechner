@@ -27,7 +27,7 @@ struct FuetternKarte: View {
         let f = db.fuetterung
         let heute = Date()
         let rest = f.restTage(heute: heute)
-        let rhythmus = f.intervall == 7 ? "jede Woche" : f.intervall == 1 ? "jeden Tag" : "alle \(f.intervall) Tage"
+        let rhythmus = f.rhythmus
         Card {
             HStack(spacing: 0) {
                 CardTitle("Sauerteig füttern", hint: erinnern

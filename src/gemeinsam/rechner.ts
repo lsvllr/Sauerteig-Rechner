@@ -284,13 +284,22 @@ export function berechneRezept(e: Eingabe): Rezept {
         weizen: Math.round((gesamtMehl * anteile.weizen) / 100),
         buchweizen: Math.round((gesamtMehl * anteile.buchweizen) / 100)
     };
+    // Rundungsrest der Mehle (±1 g) zum Mehl mit dem größten Anteil, damit sie zusammen genau das Hauptteigmehl sind
+    // (nur bei Anteilen mit 100 %).
+    const sorten = ['roggen', 'dinkel', 'weizen', 'buchweizen'] as const;
+    if (sorten.reduce((x, k) => x + anteile[k], 0) === 100) {
+        const groesste = sorten.reduce((a, b) => (anteile[b] > anteile[a] ? b : a));
+        mehl[groesste] += gesamtMehl - sorten.reduce((x, k) => x + mehl[k], 0);
+    }
 
     const gesamtWasserZiel = Math.round((mehlGanz * e.hydration) / 100);
-    const hauptteigWasser = Math.max(0, gesamtWasserZiel - imAnstellgut - sauerteigWasser);
-
     const salz = Math.round(mehlGanz * SALZ);
+    // Rundungsreste (meist ±1 g) gleicht das Wasser im Hauptteig aus: Der Teig wiegt genau das gewählte Gewicht.
+    const ohneWasser = sauerteigGesamt + gesamtMehl + salz;
+    const wasserRoh = Math.max(0, gesamtWasserZiel - imAnstellgut - sauerteigWasser);
+    const hauptteigWasser = Math.abs(e.brotGroesse - ohneWasser - wasserRoh) <= 5 ? e.brotGroesse - ohneWasser : wasserRoh;
 
-    const teiggewicht = Math.round(sauerteigGesamt + gesamtMehl + hauptteigWasser + salz);
+    const teiggewicht = ohneWasser + hauptteigWasser;
     const hydration = Math.round(((imAnstellgut + sauerteigWasser + hauptteigWasser) / mehlGanz) * 100);
 
     const sauerteigArt = e.sauerteigArt ?? sauerteigArtFuer(anteile);

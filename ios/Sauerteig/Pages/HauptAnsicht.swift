@@ -360,7 +360,7 @@ struct HauptAnsicht: View {
                         let erledigt = l.map { backen && i < $0.laufend } ?? false
                         AblaufAbschnitt(offen: offen == i, umschalten: { oeffne(offen == i ? -1 : i) }) {
                             VStack(alignment: .leading, spacing: 8) {
-                                Anleitung(art: s.art, r: r, w: w)
+                                Anleitung(art: s.art, r: r, w: w, hinweis: s.art == .ansetzen ? db.fuetterung.ansetzHinweis() : "")
                                 if let l, let c, backen ? (l.abhakbar(i) && i <= c) : (i == BackLauf.beginn && !l.mitStart(i)) {
                                     let n = i + 1
                                     HStack(spacing: 8) {

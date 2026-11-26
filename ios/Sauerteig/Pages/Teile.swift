@@ -38,6 +38,8 @@ struct Anleitung: View {
     let art: SchrittArt?
     let r: Berechnung
     let w: SauerteigWerte
+    /// Beim Ansetzen: Anstellgut aus dem Kühlschrank (`Fuetterung.ansetzHinweis`); sonst leer
+    var hinweis: String = ""
 
     private func zeile(_ l: String, _ v: String, info: String = "") -> some View {
         HStack(spacing: 4) {
@@ -86,6 +88,7 @@ struct Anleitung: View {
                 zeile("Anstellgut", "\(r.anstellgut) g")
                 zeile(r.sauerteigArt.sorte.mehlName, "\(r.sauerteigMehl) g", info: SauerteigDaten.mehlInfo)
                 zeile("Wasser", "\(r.sauerteigWasser) ml")
+                if !hinweis.isEmpty { Pill(hinweis, .soon, icon: "refrigerator") }
                 if !r.sauerteigHinweis.isEmpty { Pill(r.sauerteigHinweis, .today) }
                 if !r.tempHinweis.isEmpty { Pill(r.tempHinweis, .today) }
                 steps(["Anstellgut, Mehl und Wasser (\(r.verhaeltnis.text)) gründlich verrühren.",

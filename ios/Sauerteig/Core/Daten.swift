@@ -25,6 +25,23 @@ struct Fuetterung: Hashable {
     /// Ab so vielen Tagen über der Fälligkeit gilt der Sauerteig als dringend (Glas rot, Erinnerung jeden Tag).
     static let dringendAb = 2
 
+    /// Bei Zimmertemperatur braucht Anstellgut alle 1–2 Tage Futter; wer seltener füttert, hält es im Kühlschrank.
+    var imKuehlschrank: Bool { intervall >= 3 }
+
+    /// „jede Woche“, „jeden Tag“, „alle 3 Tage“
+    var rhythmus: String { intervall == 7 ? "jede Woche" : intervall == 1 ? "jeden Tag" : "alle \(intervall) Tage" }
+
+    /// Hinweis beim Ansetzen des Sauerteigs; leer, wenn das Anstellgut bei Zimmertemperatur lebt. Kaltes Anstellgut
+    /// reift langsamer an; lange nicht gefüttertes ist schwach und sauer und sollte vorher aufgefrischt werden.
+    func ansetzHinweis(heute: Date = Date()) -> String {
+        guard imKuehlschrank else { return "" }
+        var t = "Dein Anstellgut kommt aus dem Kühlschrank (Füttern \(rhythmus)): 1–2 Stunden vorher herausnehmen und bei Zimmertemperatur stehen lassen, sonst reift der Sauerteig langsamer."
+        if let rest = restTage(heute: heute), rest <= -Self.dringendAb {
+            t += " Füttern ist seit \(-rest) Tagen fällig: besser vorher einmal auffrischen und warten, bis es sich verdoppelt hat."
+        }
+        return t
+    }
+
     /// Tage bis zur Fälligkeit nach Kalendertagen: 0 = heute fällig, negativ = überfällig; `nil` = nie eingetragen.
     func restTage(heute: Date = Date()) -> Int? {
         guard let faellig else { return nil }

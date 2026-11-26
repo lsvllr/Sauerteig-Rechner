@@ -87,7 +87,18 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
         let x = Rechner.rezept(wt.eingabe)
         return [x.anstellgut, x.sauerteigMehl, x.teiggewicht, x.hydration]
     }
-    pruefe(mengen == [[253, 253, 1499, 76], [152, 304, 1500, 76], [69, 345, 1499, 76]], "Mengen je Verhältnis: \(mengen)")
+    pruefe(mengen == [[253, 253, 1500, 76], [152, 304, 1500, 76], [69, 345, 1500, 76]], "Mengen je Verhältnis: \(mengen)")
+    // Teig wiegt genau das gewählte Gewicht, die Mehle ergeben zusammen das Hauptteigmehl
+    var genau = true
+    for k in SauerteigDaten.mischungen {
+        for g in stride(from: 600, through: 2000, by: 100) {
+            var x = SauerteigWerte(); x.mischung = k.key; x.brotGroesse = g; x.hydration = Rechner.optimaleHydration(k.anteile)
+            let rx = Rechner.rezept(x.eingabe)
+            genau = genau && rx.teiggewicht == g && rx.mehl.summe == rx.gesamtMehl
+                && rx.anstellgut + rx.sauerteigMehl + rx.sauerteigWasser + rx.mehl.summe + rx.hauptteigWasser + rx.salz == g
+        }
+    }
+    pruefe(genau, "Teiggewicht genau")
     wt.verhaeltnis = .mild
     pruefe(Rechner.rezept(wt.eingabe).zeitplan.sauerteigZeit == "11-14h" && Rechner.rezept(wt.eingabe).geschmack.hasSuffix("milde Säure"), "mild reift länger")
     // Alte Rezepte (ohne Verhältnis): Teiggewicht und Hydration wie damals
@@ -255,6 +266,11 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
     pruefe(vor(7).stand(heute: heute) == .faellig && vor(7).restTage(heute: heute) == 0, "heute fällig: gelb")
     pruefe(vor(8).stand(heute: heute) == .faellig, "1 Tag drüber: gelb")
     pruefe(vor(9).stand(heute: heute) == .dringend && vor(30).stand(heute: heute) == .dringend, "2+ Tage drüber: rot")
+    // Ansetzen: Rhythmus ab 3 Tagen = Kühlschrank → Hinweis; ab 2 Tagen überfällig zusätzlich auffrischen
+    pruefe(vor(6).ansetzHinweis(heute: heute).contains("Kühlschrank") && !vor(6).ansetzHinweis(heute: heute).contains("auffrischen")
+           && vor(9).ansetzHinweis(heute: heute).contains("seit 2 Tagen") && vor(9).ansetzHinweis(heute: heute).contains("auffrischen")
+           && Fuetterung(zuletzt: heute, intervall: 1).ansetzHinweis(heute: heute).isEmpty
+           && Fuetterung(zuletzt: nil, intervall: 2).ansetzHinweis(heute: heute).isEmpty, "Hinweis Anstellgut aus dem Kühlschrank")
 }
 
 MainActor.assumeIsolated { laufe() }

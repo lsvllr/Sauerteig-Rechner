@@ -56,5 +56,6 @@ export const tipps: readonly string[] = [
     'Nach dem Backen mindestens 2h auskühlen lassen',
     'Je höher der Roggen-Anteil, desto kompakter das Brot',
     'Weizenteig kann geformt über Nacht im Kühlschrank gehen (8-14 h) und kommt kalt in den Ofen',
+    'Anstellgut aus dem Kühlschrank 1–2 h vorher bei Zimmertemperatur stehen lassen',
     'Warmer Ort für die Gare: Backofen mit eingeschalteter Lampe hat ca. 30 °C'
 ];

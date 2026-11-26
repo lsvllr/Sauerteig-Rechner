@@ -128,6 +128,7 @@ enum SauerteigDaten {
         "Nach dem Backen mindestens 2h auskühlen lassen",
         "Je höher der Roggen-Anteil, desto kompakter das Brot",
         "Weizenteig kann geformt über Nacht im Kühlschrank gehen (8-14 h) und kommt kalt in den Ofen",
+        "Anstellgut aus dem Kühlschrank 1–2 h vorher bei Zimmertemperatur stehen lassen",
         "Warmer Ort für die Gare: Backofen mit eingeschalteter Lampe hat ca. 30 °C",
     ]
 
@@ -391,10 +392,19 @@ enum Rechner {
         let gesamtMehl = max(0, mehlGanz - imAsg - sMehl)
         var mehl = Anteile()
         for k in Sorte.allCases { mehl[k] = jsRound(Double(gesamtMehl * a[k]) / 100) }
+        // Rundungsrest der Mehle (±1 g) zum Mehl mit dem größten Anteil (nur bei Anteilen mit 100 %). Wie im Web.
+        if a.summe == 100 {
+            var groesste = Sorte.roggen
+            for k in Sorte.allCases where a[k] > a[groesste] { groesste = k }
+            mehl[groesste] += gesamtMehl - mehl.summe
+        }
         let wasserZiel = jsRound(Double(mehlGanz * e.hydration) / 100)
-        let hauptWasser = max(0, wasserZiel - imAsg - sWasser)
         let salz = jsRound(Double(mehlGanz) * Self.salz)
-        let teig = jsRound(Double(sGesamt + gesamtMehl + hauptWasser + salz))
+        // Rundungsreste (meist ±1 g) gleicht das Wasser im Hauptteig aus: Der Teig wiegt genau das gewählte Gewicht.
+        let ohneWasser = sGesamt + gesamtMehl + salz
+        let wasserRoh = max(0, wasserZiel - imAsg - sWasser)
+        let hauptWasser = abs(e.brotGroesse - ohneWasser - wasserRoh) <= 5 ? e.brotGroesse - ohneWasser : wasserRoh
+        let teig = ohneWasser + hauptWasser
         let hyd = jsRound(Double(imAsg + sWasser + hauptWasser) / Double(mehlGanz) * 100)
         let art = e.sauerteigArt ?? sauerteigArt(a)
         let zp = zeitplan(e.sauerteigTemp, art, e.verhaeltnis)
