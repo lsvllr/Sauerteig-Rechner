@@ -35,8 +35,9 @@ der Admin für ein Konto.
   „Get API key“). Die App schickt auf Knopfdruck Fotos vom Anschnitt und die Angaben zum Backen; der Server reicht
   sie an Google Gemini weiter und speichert nichts davon. Nur für angemeldete Konten, höchstens 30 Analysen je Konto
   und Tag. Leer: Die Analyse ist aus, alles andere geht weiter.
-- **gemini_model**: Modell für die Analyse, leer = `gemini-3.8-flash`. Nur ändern, wenn Google das Modell
-  abkündigt (Liste unter ai.google.dev/gemini-api/docs/models).
+- **gemini_model**: Modell für die Analyse, leer = `gemini-3.5-flash`. Nur ändern, wenn Google das Modell
+  abkündigt (Liste unter ai.google.dev/gemini-api/docs/models). Ist das Modell ausgelastet („high demand“), weicht
+  der Server bei den nächsten Versuchen auf `gemini-3.8-flash` und `gemini-3.5-flash-lite` aus.
 
 Nach dem Ändern speichern und das Add-on neu starten.
 

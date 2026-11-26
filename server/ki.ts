@@ -5,8 +5,10 @@
 // speichert nichts davon. Der API-Schlüssel liegt nur hier (GEMINI_API_KEY), nicht in der App.
 
 const API_KEY = process.env.GEMINI_API_KEY ?? '';
-const MODELL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const MODELL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const JE_TAG = Number(process.env.GEMINI_JE_TAG ?? 30);
+/** Denkstufe (low | medium | high); ohne Angabe denkt Gemini 3 „medium“ oder mehr und braucht mit Fotos leicht über 90 s. */
+const DENKEN = process.env.GEMINI_DENKEN || 'low';
 
 export const MAX_BODY_KI = 4_000_000;
 const MAX_BILDER = 3;
@@ -166,6 +168,65 @@ export function saeubere(roh: unknown): Analyse | null {
 
 export type Ergebnis = { ok: true; analyse: Analyse } | { ok: false; status: number; fehler: string };
 
+type GeminiAntwort = {
+  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
+  error?: { message?: string };
+} | null;
+
+/** Gesamtfrist für alle Versuche: Cloudflare bricht nach 100 s ab, die App nach 120 s. */
+const FRIST = 85_000;
+/** Pausen vor dem 2. und 3. Versuch */
+const PAUSEN = [1_000, 3_000];
+const AUSGELASTET = new Set([429, 500, 503]);
+/** Schlüssel falsch oder gesperrt: ein anderes Modell hilft nicht. */
+const SCHLUESSEL = new Set([401, 403]);
+/** Ausweichmodelle, wenn das Modell ausgelastet ist (Google meldet 503 „high demand“ oft nur für ein Modell).
+ *  Die Versuche gehen der Reihe nach durch MODELL und diese Liste. */
+const ERSATZ = (process.env.GEMINI_ERSATZ ?? 'gemini-3.8-flash,gemini-3.5-flash-lite')
+  .split(',')
+  .map((m) => m.trim())
+  .filter(Boolean);
+const MODELLE = [...new Set([MODELL, ...ERSATZ])];
+
+/** Fragt Gemini; klappt es nicht, nach kurzer Pause mit dem nächsten Modell, solange die Frist reicht. */
+async function frageGemini(body: string): Promise<{ ok: true; antwort: GeminiAntwort } | { ok: false; status: number; fehler: string }> {
+  const ende = Date.now() + FRIST;
+  for (let versuch = 0; ; versuch++) {
+    const modell = MODELLE[versuch % MODELLE.length];
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modell)}:generateContent`;
+    let r: Response;
+    try {
+      r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
+        body,
+        signal: AbortSignal.timeout(Math.max(1_000, ende - Date.now())),
+      });
+    } catch (err) {
+      const zeit = err instanceof Error && err.name === 'TimeoutError';
+      console.warn(`Gemini ${modell} nicht erreichbar (Versuch ${versuch + 1}):`, zeit ? 'Zeit abgelaufen' : err);
+      return { ok: false, status: 504, fehler: zeit ? 'Gemini hat zu lange gebraucht, bitte noch einmal' : 'Gemini ist gerade nicht erreichbar' };
+    }
+    const antwort = (await r.json().catch(() => null)) as GeminiAntwort;
+    if (r.ok) {
+      if (versuch > 0) console.log(`Gemini: Antwort von ${modell} (Versuch ${versuch + 1})`);
+      return { ok: true, antwort };
+    }
+    console.warn(`Gemini ${modell} HTTP ${r.status} (Versuch ${versuch + 1}):`, antwort?.error?.message ?? '');
+    const pause = PAUSEN[versuch];
+    // Neuer Versuch (mit dem nächsten Modell) nur, wenn danach noch Zeit für eine Antwort bleibt (gut 30 s).
+    if (!SCHLUESSEL.has(r.status) && pause !== undefined && Date.now() + pause + 30_000 < ende) {
+      await new Promise((f) => setTimeout(f, pause));
+      continue;
+    }
+    return {
+      ok: false,
+      status: 502,
+      fehler: AUSGELASTET.has(r.status) ? 'Gemini ist gerade ausgelastet, bitte in ein paar Minuten noch einmal' : 'Gemini hat die Anfrage abgelehnt',
+    };
+  }
+}
+
 export async function analysiere(konto: number, a: { bilder: string[]; kontext: string }): Promise<Ergebnis> {
   if (!aktiv()) return { ok: false, status: 503, fehler: 'Die KI-Analyse ist auf dem Server nicht eingerichtet' };
   if (zuViel(konto)) return { ok: false, status: 429, fehler: `Heute schon ${JE_TAG} Analysen, morgen wieder` };
@@ -184,28 +245,13 @@ export async function analysiere(konto: number, a: { bilder: string[]; kontext: 
         ],
       },
     ],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.3 },
+    // Kein eigener Wert für temperature: Gemini 3 ist auf 1.0 abgestimmt, darunter kann es sich in Schleifen
+    // verrennen. Wenig Denken reicht für ein Foto mit festem Schema und hält die Antwort weit unter der Frist.
+    generationConfig: { responseMimeType: 'application/json', responseSchema: SCHEMA, thinkingConfig: { thinkingLevel: DENKEN } },
   };
-  let r: Response;
-  try {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODELL)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(90_000),
-    });
-  } catch (err) {
-    console.warn('Gemini nicht erreichbar:', err);
-    return { ok: false, status: 502, fehler: 'Gemini ist gerade nicht erreichbar' };
-  }
-  const antwort = (await r.json().catch(() => null)) as {
-    candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
-    error?: { message?: string };
-  } | null;
-  if (!r.ok) {
-    console.warn(`Gemini HTTP ${r.status}:`, antwort?.error?.message ?? '');
-    return { ok: false, status: 502, fehler: r.status === 429 ? 'Gemini ist ausgelastet, bitte später noch einmal' : 'Gemini hat die Anfrage abgelehnt' };
-  }
+  const r = await frageGemini(JSON.stringify(body));
+  if (!r.ok) return r;
+  const antwort = r.antwort;
   const teile = antwort?.candidates?.[0]?.content?.parts ?? [];
   const json = teile.filter((p) => !p.thought && typeof p.text === 'string').map((p) => p.text).join('');
   let roh: unknown = null;
