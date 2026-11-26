@@ -1,7 +1,7 @@
 import PhotosUI
 import SwiftUI
 
-/// Wurzel der App: Tabs „Backen“ (Rechner, Timer) und „Tagebuch“.
+/// Wurzel der App: Tabs „Backen“ (Rechner, Timer) und „Tagebuch“ mit der Tab-Leiste von iOS.
 struct Wurzel: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var db: Datenbank
@@ -9,14 +9,58 @@ struct Wurzel: View {
     var body: some View {
         TabView(selection: $app.tab) {
             HauptAnsicht()
+                .hereinGleiten(.backen)
                 .tabItem { Label("Backen", systemImage: "oven") }
                 .tag(AppState.Tab.backen)
             TagebuchAnsicht()
+                .hereinGleiten(.tagebuch)
                 .tabItem { Label("Tagebuch", systemImage: "book") }
                 .tag(AppState.Tab.tagebuch)
         }
         .onAppear { db.uebernimmRezepte() }
     }
+}
+
+/// Tab-Wechsel mit Bewegung: `TabView` tauscht die Seiten ohne Animation. Wird `tab` gewählt, gleitet seine Seite
+/// von der Seite herein, auf der ihr Tab in der Leiste liegt (Backen links, Tagebuch rechts), und blendet dabei
+/// auf. Der Hintergrund steht still, damit beim Gleiten keine Kante sichtbar wird.
+private struct HereinGleiten: ViewModifier {
+    let tab: AppState.Tab
+    @EnvironmentObject private var app: AppState
+    @State private var breite: CGFloat = 390
+    @State private var mal = 0
+
+    private struct Stand {
+        var x: CGFloat = 0
+        var deckkraft: Double = 1
+    }
+
+    func body(content: Content) -> some View {
+        ZStack {
+            Color.hhBg.ignoresSafeArea()
+            content
+                .keyframeAnimator(initialValue: Stand(), trigger: mal) { c, s in
+                    c.offset(x: s.x).opacity(s.deckkraft)
+                } keyframes: { _ in
+                    KeyframeTrack(\.x) {
+                        MoveKeyframe(tab == .tagebuch ? breite * 0.35 : -breite * 0.35)
+                        SpringKeyframe(0, duration: 0.42, spring: .snappy)
+                    }
+                    KeyframeTrack(\.deckkraft) {
+                        MoveKeyframe(0)
+                        LinearKeyframe(1, duration: 0.2)
+                    }
+                }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { breite = $0 }
+        .onChange(of: app.tab) { alt, neu in
+            if neu == tab && alt != neu { mal += 1 }
+        }
+    }
+}
+
+extension View {
+    fileprivate func hereinGleiten(_ tab: AppState.Tab) -> some View { modifier(HereinGleiten(tab: tab)) }
 }
 
 /// Tab „Tagebuch“: jedes gesicherte Rezept und jedes fertig gebackene Brot (Core/Tagebuch.swift), neueste zuerst.
@@ -115,11 +159,16 @@ private struct Vorschaubild: View {
             if let id, let b = Bilder.lade(id) {
                 Image(uiImage: b).resizable().scaledToFill()
             } else {
-                Image(systemName: id == nil ? "birthday.cake" : "icloud.slash")
-                    .font(.system(size: groesse * 0.36))
-                    .foregroundStyle(Color.hhMuted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.hhFill)
+                Group {
+                    if id == nil {
+                        // Kein Brot unter den SF Symbols: Emoji, grau wie die übrigen Platzhalter
+                        Text("🍞").font(.system(size: groesse * 0.46)).grayscale(1).opacity(0.55)
+                    } else {
+                        Image(systemName: "icloud.slash").font(.system(size: groesse * 0.36)).foregroundStyle(Color.hhMuted)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.hhFill)
             }
         }
         .frame(width: groesse, height: groesse)
