@@ -171,12 +171,12 @@ func pruefe(_ ok: Bool, _ was: String, line: Int = #line) {
     pruefe(eb?.werte == wc && eb?.verlauf == lt && eb?.reife.tatsaechlich == 540 && eb?.reife.geplant != nil, "Eintrag aus Lauf: \(String(describing: eb?.reife))")
     pruefe(KIKontext(eb!, alle: tb.backeintraege).aktuell.schritte?[BackLauf.beginn + 1].tatsaechlichMin == 540, "Kontext: tatsächliche Zeit")
     // Alter Eintrag (abgehakt = Ende des Schritts): Zeiten wandern einen Schritt weiter
-    let m = 60_000.0, t0 = 1_000_000 + 480 * m
+    let m = 60_000.0, tAlt = 1_000_000 + 480 * m
     let altLauf = BackLauf.neu(r.schritte, start: 1_000_000, vorlauf: 10, reife: (480, 600))
-        .hakeAb(1, am: t0).hakeAb(2, am: t0 + 60 * m).hakeAb(3, am: t0 + 180 * m)
+        .hakeAb(1, am: tAlt).hakeAb(2, am: tAlt + 60 * m).hakeAb(3, am: tAlt + 180 * m)
     let neuLauf = altLauf.ausAltemModell()
-    pruefe(neuLauf.schritte[1].at == t0 && neuLauf.schritte[2].at == t0 + 50 * m && neuLauf.schritte[3].at == t0 + 60 * m
-           && neuLauf.schritte[4].at == t0 + 180 * m && neuLauf.offenAb == 5, "alter Verlauf umgerechnet")
+    pruefe(neuLauf.schritte[1].at == tAlt && neuLauf.schritte[2].at == tAlt + 50 * m && neuLauf.schritte[3].at == tAlt + 60 * m
+           && neuLauf.schritte[4].at == tAlt + 180 * m && neuLauf.offenAb == 5, "alter Verlauf umgerechnet")
     tb.schreibe(Datenbank.eintragTabelle, "alt1", ["einstellungen": .json(wc.einstellungen), "verlauf": .json(altLauf)])
     pruefe(tb.backeintrag("alt1")?.verlauf == neuLauf, "alter Eintrag wird beim Lesen umgerechnet")
     pruefe(tb.backeintrag(lu)?.verlauf == lt, "neuer Eintrag bleibt")
