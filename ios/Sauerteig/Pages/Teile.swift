@@ -88,9 +88,15 @@ struct Anleitung: View {
                 zeile("Anstellgut", "\(r.anstellgut) g")
                 zeile(r.sauerteigArt.sorte.mehlName, "\(r.sauerteigMehl) g", info: SauerteigDaten.mehlInfo)
                 zeile("Wasser", "\(r.sauerteigWasser) ml")
-                if !hinweis.isEmpty { Pill(hinweis, .soon, icon: "refrigerator") }
-                if !r.sauerteigHinweis.isEmpty { Pill(r.sauerteigHinweis, .today) }
-                if !r.tempHinweis.isEmpty { Pill(r.tempHinweis, .today) }
+                if !hinweis.isEmpty || !r.sauerteigHinweis.isEmpty || !r.tempHinweis.isEmpty {
+                    // Hinweise mit Luft zu den Zutaten darüber und den Schritten darunter
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !hinweis.isEmpty { HinweisBox(hinweis, .info, icon: "refrigerator") }
+                        if !r.sauerteigHinweis.isEmpty { HinweisBox(r.sauerteigHinweis) }
+                        if !r.tempHinweis.isEmpty { Pill(r.tempHinweis, .today) }
+                    }
+                    .padding(.vertical, 8)
+                }
                 steps(["Anstellgut, Mehl und Wasser (\(r.verhaeltnis.text)) gründlich verrühren.",
                        "Abgedeckt bei \(w.sauerteigTemp) °C **\(r.zeitplan.sauerteigZeit)** reifen lassen.",
                        (r.sauerteigArt == .roggen

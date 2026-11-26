@@ -294,7 +294,7 @@ struct HauptAnsicht: View {
     private var tempKarte: some View {
         Card {
             Text("Sauerteig und Temperaturen").font(.headline)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Verhältnis").font(.subheadline.weight(.semibold))
                 Picker("Verhältnis", selection: $w.verhaeltnis) {
                     ForEach(Verhaeltnis.allCases, id: \.self) { Text($0.name).tag($0) }
@@ -304,24 +304,24 @@ struct HauptAnsicht: View {
                 FactRow("Anstellgut", "\(r.anstellgut) g · \(r.verhaeltnis.text)")
                 Note("Aus Teiggewicht und Verhältnis; \(r.versaeuerung) % des Mehls stecken im Sauerteig. Mehr Futter (1 : 5 : 5) reift länger und schmeckt milder, weniger (1 : 1 : 1) geht schneller und wird kräftiger.")
                 if r.anstellgut > Self.anstellgutViel {
-                    Pill("So viel Anstellgut hast du vielleicht nicht im Glas: am Vortag auffrischen und vermehren.", .today)
+                    HinweisBox("So viel Anstellgut hast du vielleicht nicht im Glas: am Vortag auffrischen und vermehren.")
                 }
             }
-            .padding(.bottom, 4)
-            VStack(alignment: .leading, spacing: 6) {
+            .padding(.bottom, 10)
+            VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
-                    Text("Sauerteig aus").font(.subheadline.weight(.semibold))
+                    Text("Sauerteig").font(.subheadline.weight(.semibold))
                     w.sauerteigArt == Rechner.sauerteigArt(w.anteile)
                         ? Pill("Passend zum Brot", .effort) : Pill("Angepasst", .today)
                 }
-                Picker("Sauerteig aus", selection: $w.sauerteigArt) {
+                Picker("Sauerteig", selection: $w.sauerteigArt) {
                     ForEach(SauerteigArt.allCases, id: \.self) { Text($0.sorte.name).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .sensoryFeedback(.selection, trigger: w.sauerteigArt)
-                if !r.sauerteigHinweis.isEmpty { Note(r.sauerteigHinweis) }
+                if !r.sauerteigHinweis.isEmpty { HinweisBox(r.sauerteigHinweis) }
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, 10)
             Regler(label: "Sauerteig-Temperatur", wert: "\(w.sauerteigTemp) °C", value: $w.sauerteigTemp, range: 18...32, step: 1)
             Regler(label: "Gare-Temperatur", wert: "\(w.gareTemp) °C", value: $w.gareTemp, range: 20...32, step: 1)
             Text("Ofen").font(.headline).padding(.top, 10)

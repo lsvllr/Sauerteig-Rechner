@@ -190,6 +190,37 @@ struct Pill: View {
     }
 }
 
+/// Hinweis über mehrere Zeilen als Kasten (wie `.sd-note` im Web): Warnungen und Tipps zu einem Schritt. Für kurze
+/// Kennzeichen in einer Zeile → `Pill`.
+struct HinweisBox: View {
+    enum Art { case warnung, info }
+    var text: String
+    var art: Art = .warnung
+    var icon: String? = nil
+
+    init(_ text: String, _ art: Art = .warnung, icon: String? = nil) {
+        self.text = text
+        self.art = art
+        self.icon = icon
+    }
+
+    var body: some View {
+        let (bg, fg, line): (Color, Color, Color) = art == .info
+            ? (.hhInfoBg, .hhInfoFg, .hhInfoLine) : (.hhWarnBg, .hhWarnFg, .hhWarnLine)
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            if let icon { Image(systemName: icon) }
+            Text(text).fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(fg)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(bg, in: RoundedRectangle(cornerRadius: Metrics.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Metrics.radius, style: .continuous).strokeBorder(line))
+    }
+}
+
 // MARK: - Knöpfe
 
 /// `.primary`: Markenfarbe, volle Breite optional.

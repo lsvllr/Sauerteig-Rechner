@@ -903,7 +903,7 @@ export function Rechner({
             </div>
             <div className="sd-art">
               <span className="sd-art-label" id="sd-art-label">
-                Sauerteig aus{' '}
+                Sauerteig{' '}
                 {r.sauerteigArt === artPassend ? (
                   <span className="pill effort">Passend zum Brot</span>
                 ) : (
